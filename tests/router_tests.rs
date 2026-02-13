@@ -191,8 +191,10 @@ fn hook_rewrites_wrapped_git_commands() {
 #[test]
 fn hook_passthrough_for_unknown_command_without_smart_path() {
     // Without the smart path enabled, unknown commands should passthrough.
-    // The smart path is disabled by default, so this should be a passthrough.
+    // Explicitly disable smart path to avoid depending on environment.
+    unsafe { std::env::set_var("TERSE_SMART_PATH", "0") };
     let decision = decide_hook("some-unknown-tool --verbose");
+    unsafe { std::env::remove_var("TERSE_SMART_PATH") };
     match decision {
         HookDecision::Passthrough(reason) => {
             assert_eq!(reason, PassthroughReason::NoPathAvailable);

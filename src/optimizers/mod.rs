@@ -74,6 +74,12 @@ pub struct OptimizerRegistry {
     optimizers: Vec<Box<dyn Optimizer>>,
 }
 
+impl Default for OptimizerRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizerRegistry {
     pub fn new() -> Self {
         Self {

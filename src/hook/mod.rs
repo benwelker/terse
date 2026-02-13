@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use chrono::Utc;
 
+use crate::analytics::events;
 use crate::hook::protocol::{HookRequest, HookResponse};
 use crate::router::{self, HookDecision};
 
@@ -56,10 +57,12 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
     ));
 
     if !is_bash {
+        events::log_passthrough(&request.tool_name, request.tool_input.command.as_deref(), "not bash");
         return Ok(HookResponse::passthrough());
     }
 
     let Some(command) = request.tool_input.command.as_deref() else {
+        events::log_passthrough(&request.tool_name, None, "no command");
         return Ok(HookResponse::passthrough());
     };
 
@@ -72,10 +75,12 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
             log_hook_event(&format!(
                 "router decided rewrite (expected: {expected_path}); command: {rewritten}"
             ));
+            events::log_rewrite(&request.tool_name, Some(command), &expected_path.to_string());
             Ok(HookResponse::rewrite(&rewritten))
         }
         HookDecision::Passthrough(reason) => {
             log_hook_event(&format!("router decided passthrough ({reason})"));
+            events::log_passthrough(&request.tool_name, Some(command), &reason.to_string());
             Ok(HookResponse::passthrough())
         }
     }
@@ -109,10 +114,10 @@ fn log_hook_event(message: &str) {
         return;
     };
 
-    if let Some(parent) = log_path.parent() {
-        if create_dir_all(parent).is_err() {
-            return;
-        }
+    if let Some(parent) = log_path.parent()
+        && create_dir_all(parent).is_err()
+    {
+        return;
     }
 
     let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) else {

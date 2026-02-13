@@ -85,7 +85,7 @@ fn has_numeric_limit(text: &str) -> bool {
 fn stash_subcommand(lower: &str) -> &str {
     lower
         .strip_prefix("git stash")
-        .and_then(|rest| rest.trim_start().split_whitespace().next())
+        .and_then(|rest| rest.split_whitespace().next())
         .unwrap_or("")
 }
 
@@ -94,6 +94,12 @@ fn stash_subcommand(lower: &str) -> &str {
 // ---------------------------------------------------------------------------
 
 pub struct GitOptimizer;
+
+impl Default for GitOptimizer {
+    fn default() -> Self {
+        Self
+    }
+}
 
 impl GitOptimizer {
     pub fn new() -> Self {
@@ -202,10 +208,10 @@ fn format_porcelain_status(porcelain: &str) -> String {
     let mut output = String::new();
 
     // Parse branch info from ## line
-    if let Some(branch_line) = lines.first() {
-        if let Some(branch) = branch_line.strip_prefix("## ") {
-            output.push_str(&format!("branch: {branch}\n"));
-        }
+    if let Some(branch_line) = lines.first()
+        && let Some(branch) = branch_line.strip_prefix("## ")
+    {
+        output.push_str(&format!("branch: {branch}\n"));
     }
 
     let mut staged: Vec<&str> = Vec::new();

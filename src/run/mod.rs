@@ -20,9 +20,11 @@ pub fn execute(command: &str) -> Result<()> {
 
     log_command_result_with_latency(
         command,
+        &result.path.to_string(),
         result.original_tokens,
         result.optimized_tokens,
         &result.optimizer_name,
+        true, // success — we reached this point without error
         result.latency_ms,
     );
 

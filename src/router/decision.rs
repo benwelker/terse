@@ -1,7 +1,7 @@
-/// Router decision types and in-memory decision cache.
-///
-/// Defines the core types used by the router to classify optimization
-/// decisions and communicate them to the hook and run modules.
+//! Router decision types and in-memory decision cache.
+//!
+//! Defines the core types used by the router to classify optimization
+//! decisions and communicate them to the hook and run modules.
 
 use std::collections::HashMap;
 use std::fmt;

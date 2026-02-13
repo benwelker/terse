@@ -76,10 +76,7 @@ impl CircuitBreaker {
     /// expired — the path auto-resumes).
     pub fn is_allowed(&self, path: PathId) -> bool {
         let ps = self.path_state(path);
-        match ps.tripped_until {
-            Some(deadline) if Utc::now() < deadline => false,
-            _ => true,
-        }
+        !matches!(ps.tripped_until, Some(deadline) if Utc::now() < deadline)
     }
 
     /// Record a successful execution on the given path.
@@ -117,11 +114,11 @@ impl CircuitBreaker {
         let ps = self.path_state_mut(path);
 
         // Auto-resume: if the cooldown has expired, clear state.
-        if let Some(deadline) = ps.tripped_until {
-            if Utc::now() >= deadline {
-                ps.tripped_until = None;
-                ps.results.clear();
-            }
+        if let Some(deadline) = ps.tripped_until
+            && Utc::now() >= deadline
+        {
+            ps.tripped_until = None;
+            ps.results.clear();
         }
 
         ps.results.push(success);
@@ -191,21 +188,12 @@ struct BreakerState {
     smart_path: PathState,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct PathState {
     #[serde(default)]
     results: Vec<bool>,
     #[serde(default)]
     tripped_until: Option<DateTime<Utc>>,
-}
-
-impl Default for PathState {
-    fn default() -> Self {
-        Self {
-            results: Vec::new(),
-            tripped_until: None,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

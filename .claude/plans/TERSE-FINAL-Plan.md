@@ -187,7 +187,7 @@ terse/
 
 ## Development Phases
 
-### Phase 1: Rust Foundation + Hook Passthrough (Week 1)
+### Phase 1: Rust Foundation + Hook Passthrough (Week 1) ✅ COMPLETE
 
 **Goal:** Working binary that hooks into Claude Code, intercepts commands, and passes them through unchanged.
 
@@ -197,10 +197,10 @@ terse/
 
 **Deliverables:**
 
-- [ ] Initialize Rust project: `cargo init terse`
-- [ ] Add dependencies to `Cargo.toml`: `serde`, `serde_json`, `clap` (derive), `chrono`, `dirs`, `anyhow`
-- [ ] Implement `src/main.rs` — detect mode (hook vs CLI) based on subcommand: `terse hook` vs `terse stats`
-- [ ] Implement `src/hook/protocol.rs` — define the Claude Code hook JSON schema:
+- [x] Initialize Rust project: `cargo init terse`
+- [x] Add dependencies to `Cargo.toml`: `serde`, `serde_json`, `clap` (derive), `chrono`, `dirs`, `anyhow`
+- [x] Implement `src/main.rs` — detect mode (hook vs CLI) based on subcommand: `terse hook` vs `terse stats`
+- [x] Implement `src/hook/protocol.rs` — define the Claude Code hook JSON schema:
   - Input: `{ "tool_name": "Bash", "tool_input": { "command": "git status" } }`
   - Passthrough output: empty JSON `{}` — Claude Code proceeds unchanged
   - Rewrite output: `{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow", "permissionDecisionReason": "terse command rewrite", "updatedInput": { "command": "terse run \"git status\"" } } }` — Claude Code executes the rewritten command
@@ -208,10 +208,10 @@ terse/
     - Hooks **cannot** return command output directly — they can only allow, deny, or rewrite
     - `updatedInput` modifies the tool input before execution
     - Exit code 0 + JSON = structured control; exit code 2 = deny; empty output = passthrough
-- [ ] Implement `src/hook/mod.rs` — read JSON from stdin, check if optimizer matches, return rewrite or passthrough
-- [ ] Implement `src/run/mod.rs` — executor for `terse run "command"`: runs optimizer, logs analytics, prints result to stdout
-- [ ] Implement `src/main.rs` — CLI with subcommands: `terse hook` (PreToolUse handler), `terse run <command>` (optimizer executor), `terse stats` (analytics)
-- [ ] Register hook manually in `~/.claude/settings.json`:
+- [x] Implement `src/hook/mod.rs` — read JSON from stdin, check if optimizer matches, return rewrite or passthrough
+- [x] Implement `src/run/mod.rs` — executor for `terse run "command"`: runs optimizer, logs analytics, prints result to stdout
+- [x] Implement `src/main.rs` — CLI with subcommands: `terse hook` (PreToolUse handler), `terse run <command>` (optimizer executor), `terse stats` (analytics)
+- [x] Register hook manually in `~/.claude/settings.json`:
   ```json
   {
     "hooks": {
@@ -230,7 +230,7 @@ terse/
   }
   ```
   During development, point to the build output: `C:\source\repos\terse\target\debug\terse.exe hook`
-- [ ] Test: run Claude Code session, verify commands execute normally and output is unchanged
+- [x] Test: run Claude Code session, verify commands execute normally and output is unchanged
 
 **Success Criteria:**
 
@@ -241,7 +241,7 @@ terse/
 
 ---
 
-### Phase 2: Git Optimizer — End-to-End Token Savings (Week 2–3)
+### Phase 2: Git Optimizer — End-to-End Token Savings (Week 2–3) ✅ COMPLETE
 
 **Goal:** Ship the first measurable optimization — git commands producing 60–90% fewer tokens.
 
@@ -251,24 +251,24 @@ terse/
 
 **Deliverables:**
 
-- [ ] Define the `Optimizer` trait in `src/optimizers/mod.rs`:
+- [x] Define the `Optimizer` trait in `src/optimizers/mod.rs`:
   - `fn can_handle(&self, command: &str) -> bool`
   - `fn execute_and_optimize(&self, command: &str) -> Result<OptimizedOutput>` — optimizer runs the command (or a substitute) and returns optimized output
   - `OptimizedOutput` struct: `{ output: String, original_tokens: usize, optimized_tokens: usize, optimizer_used: String }`
-- [ ] Create optimizer registry — a `Vec<Box<dyn Optimizer>>` that tries each in order via `execute_first()`
-- [ ] Implement `src/optimizers/git.rs` with these sub-optimizers:
+- [x] Create optimizer registry — a `Vec<Box<dyn Optimizer>>` that tries each in order via `execute_first()`
+- [x] Implement `src/optimizers/git.rs` with these sub-optimizers:
   - `git status` → **command substitution**: run `git status --short --branch` instead, return compact output
   - `git log` → **command substitution**: run `git log --oneline -n 20` instead, return compact format
   - `git diff` → **output post-processing**: run original command, reduce context lines, truncate large diffs with summary
   - `git push/pull/fetch/add/commit` → **output post-processing**: capture output, return 1-line success/failure confirmation
   - `git branch` → **output post-processing**: compact list, highlight current branch
-- [ ] Implement `src/utils/token_counter.rs` — heuristic: `chars / 4` for token estimation
-- [ ] Implement `src/utils/process.rs` — cross-platform command execution wrapper
-- [ ] Wire optimizers into hook flow: hook checks optimizer match → rewrites to `terse run` via `updatedInput` → `terse run` executes optimizer → prints optimized output
-- [ ] Add basic logging to `~/.terse/command-log.jsonl`:
+- [x] Implement `src/utils/token_counter.rs` — heuristic: `chars / 4` for token estimation
+- [x] Implement `src/utils/process.rs` — cross-platform command execution wrapper
+- [x] Wire optimizers into hook flow: hook checks optimizer match → rewrites to `terse run` via `updatedInput` → `terse run` executes optimizer → prints optimized output
+- [x] Add basic logging to `~/.terse/command-log.jsonl`:
   - Timestamp, command, original tokens, optimized tokens, savings %, optimizer used
-- [ ] Write unit tests: test each git optimizer against sample outputs, verify token reduction
-- [ ] Manual testing with Claude Code: verify Claude understands optimized git output
+- [x] Write unit tests: test each git optimizer against sample outputs, verify token reduction
+- [x] Manual testing with Claude Code: verify Claude understands optimized git output
 
 **Success Criteria:**
 
@@ -279,7 +279,7 @@ terse/
 
 ---
 
-### Phase 2-1: Command Matching Engine (Week 2–3, alongside Phase 2)
+### Phase 2-1: Command Matching Engine (Week 2–3, alongside Phase 2) ✅ COMPLETE
 
 **Goal:** Robust extraction and matching of tool-use commands from Claude's shell invocations, handling prefixed, chained, and wrapped commands that simple equality checks would miss.
 
@@ -298,7 +298,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 **Deliverables:**
 
-- [ ] Implement `src/matching/mod.rs` — command extraction and normalization engine:
+- [x] Implement `src/matching/mod.rs` — command extraction and normalization engine:
   - `extract_core_command(raw: &str) -> &str` — strip common wrappers:
     - `cd <path> &&` prefix → extract everything after `&&`
     - `ENV=val` prefixes → strip environment variable assignments
@@ -307,10 +307,10 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
     - Pipeline chains: match only the first command in `cmd1 | cmd2`
   - `matches_command(raw: &str, target: &str) -> bool` — check if the extracted command starts with `target`
   - Returns the normalized command for the optimizer to use
-- [ ] Refactor `normalized_git_command()` in `git.rs` to use the shared extraction engine
-- [ ] Update `OptimizerRegistry::can_handle()` to use the matching engine
-- [ ] Add the `terse run` infinite-loop guard to the matching engine (skip commands containing `terse` + `run`)
-- [ ] Write comprehensive unit tests for edge cases:
+- [x] Refactor `normalized_git_command()` in `git.rs` to use the shared extraction engine
+- [x] Update `OptimizerRegistry::can_handle()` to use the matching engine
+- [x] Add the `terse run` infinite-loop guard to the matching engine (skip commands containing `terse` + `run`)
+- [x] Write comprehensive unit tests for edge cases:
   - Simple: `git status` → matches `git`
   - Prefixed: `cd /repo && git status` → matches `git`
   - Env vars: `PAGER=cat git log` → matches `git`
@@ -330,7 +330,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 ---
 
-### Phase 3: LLM Smart Path — Ollama Integration (Week 3–4)
+### Phase 3: LLM Smart Path — Ollama Integration (Week 3–4) ✅ COMPLETE
 
 **Goal:** Any command without a rule-based optimizer gets intelligently optimized by a local LLM.
 
@@ -340,21 +340,21 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 **Deliverables:**
 
-- [ ] Add `ureq` (sync HTTP with JSON feature) to `Cargo.toml`
-- [ ] Implement **runtime feature flag** for the LLM Smart Path:
+- [x] Add `ureq` (sync HTTP with JSON feature) to `Cargo.toml`
+- [x] Implement **runtime feature flag** for the LLM Smart Path:
   - Default: **disabled** (opt-in). The smart path must be explicitly enabled.
   - **Environment variable**: `TERSE_SMART_PATH=1` (or `true`) to enable, `0`/`false`/unset to disable.
   - **JSON config file**: `~/.terse/config.json` with `{ "smart_path": { "enabled": true } }`.
   - **Precedence**: env var > JSON config > default (disabled).
   - Implement in `src/llm/config.rs` — `SmartPathConfig` struct with `load()` method.
   - All LLM code paths check `SmartPathConfig::load().enabled` before activating.
-- [ ] Implement `src/llm/ollama.rs`:
+- [x] Implement `src/llm/ollama.rs`:
   - `POST http://localhost:11434/api/generate` with model, prompt, stream=false
   - Configurable model name (default: `llama3.2:1b`)
   - Timeout: 5s cold start, 3s warm
   - Health check: `GET http://localhost:11434/api/tags` to detect Ollama availability
   - Return `Result<String>` — LLM response text
-- [ ] Implement `src/llm/prompts.rs` — category-aware prompt templates:
+- [x] Implement `src/llm/prompts.rs` — category-aware prompt templates:
   - **Version control**: "Condense this git output. Keep: branch, changes, conflicts. Remove: verbose messages."
   - **File operations**: "Condense this directory listing. Keep: paths, sizes. Remove: permissions, timestamps."
   - **Build/test**: "Condense this build output. Keep: errors, warnings, failures. Remove: passing tests, progress."
@@ -362,17 +362,17 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
   - **Logs**: "Condense these logs. Keep: errors, warnings, unique messages. Remove: duplicates, debug noise."
   - **Generic fallback**: "Condense this command output, preserving all critical information for an AI coding assistant."
   - Each prompt includes few-shot examples and token budget instruction
-- [ ] Implement `src/llm/validation.rs`:
+- [x] Implement `src/llm/validation.rs`:
   - Check LLM response is non-empty
   - Check response is shorter than original (sanity)
   - Check for common hallucination markers (fabricated paths, invented status)
   - If validation fails → fall back to raw output
-- [ ] Wire LLM into **both** hook and run flows (two-level routing per execution model):
+- [x] Wire LLM into **both** hook and run flows (two-level routing per execution model):
   - **Hook level** (`src/hook/mod.rs`): After checking rule-based optimizers, also check if smart path is enabled AND Ollama is healthy. If so, rewrite to `terse run` even though no rule-based optimizer matched. The hook **cannot** check output size — it runs pre-execution.
   - **Run level** (`src/run/mod.rs`): After executing the command raw (when no optimizer matched), check output size. If output > `min_output_chars` (default 200) AND smart path is enabled AND Ollama is available → send to LLM. If output < 100 chars → passthrough (not worth optimizing).
   - This two-level split aligns with the Core Architecture execution model where the hook makes the pre-execution rewrite decision and `terse run` makes the post-execution optimization decision.
-- [ ] Log LLM path usage: command, latency, tokens saved, model used
-- [ ] Write integration tests (gated behind `#[cfg(feature = "llm-tests")]` or environment variable)
+- [x] Log LLM path usage: command, latency, tokens saved, model used
+- [x] Write integration tests (gated behind `#[cfg(feature = "llm-tests")]` or environment variable)
 
 **Prerequisite:** Ollama installed with `ollama pull llama3.2:1b`
 
@@ -395,7 +395,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 ---
 
-### Phase 4: Router & Decision Engine (Week 4–5)
+### Phase 4: Router & Decision Engine (Week 4–5) ✅ COMPLETE
 
 **Goal:** Intelligent automatic routing between fast path, smart path, and passthrough.
 
@@ -403,11 +403,11 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 **Deliverables:**
 
-- [ ] Implement `src/safety/classifier.rs` — command classification:
+- [x] Implement `src/safety/classifier.rs` — command classification:
   - **Passthrough list** (never optimize): `rm`, `mv`, `code`, `vim`, `nano`, `>`, `>>`
   - **Always optimize**: read-only commands (`git status`, `ls`, `grep`, `cat`, `docker ps`, `dotnet build`, `npm build`)
   - **Configurable**: everything else
-- [ ] Implement `src/router/decision.rs`:
+- [x] Implement `src/router/decision.rs`:
   - `enum OptimizationPath { FastPath, SmartPath, Passthrough }`
   - Decision logic:
     1. Command in passthrough list? → `Passthrough`
@@ -416,17 +416,17 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
     4. Ollama available AND output > 200 chars? → `SmartPath`
     5. Else → `Passthrough`
   - Cache recent decisions (command pattern → path) with 5-minute TTL
-- [ ] Implement `src/router/mod.rs` — orchestrate the full flow:
+- [x] Implement `src/router/mod.rs` — orchestrate the full flow:
   - Classify command → select path → execute optimizer → validate → return
   - Log path decision with every command
-- [ ] Implement `src/safety/circuit_breaker.rs`:
+- [x] Implement `src/safety/circuit_breaker.rs`:
   - Track failure rate per path (not global — if LLM is down, fast path still works)
   - If >20% failures in last 10 commands → disable that path for 10 minutes
   - Auto-resume after cooldown
   - Log circuit breaker state changes
-- [ ] Update hook handler to use router instead of direct optimizer calls
-- [ ] Add `terse test "command"` CLI subcommand — show which path would be selected and preview optimized output
-- [ ] Write router decision tests with various command/output combinations
+- [x] Update hook handler to use router instead of direct optimizer calls
+- [x] Add `terse test "command"` CLI subcommand — show which path would be selected and preview optimized output
+- [x] Write router decision tests with various command/output combinations
 
 **Success Criteria:**
 
@@ -437,7 +437,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 ---
 
-### Phase 5: Analytics & CLI (Week 5–6)
+### Phase 5: Analytics & CLI (Week 5–6) ✅ COMPLETE
 
 **Goal:** Data-driven visibility into what TERSE is doing and where to optimize next.
 
@@ -445,21 +445,22 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 **Deliverables:**
 
-- [ ] Implement `src/analytics/logger.rs` — structured JSONL logging:
+- [x] Implement `src/analytics/logger.rs` — structured JSONL logging:
   - Fields: timestamp, command, path_selected, optimizer_used, original_tokens, optimized_tokens, savings_pct, latency_ms, success
-  - Log all tools/commands for research. Include tool/command name and tokens. This will be used to find tools/commands we can add as future enchancements.
-- [ ] Implement `src/analytics/reporter.rs` — aggregation and reporting:
+  - Log all tools/commands for research. Include tool/command name and tokens. This will be used to find tools/commands we can add as future enhancements.
+- [x] Implement `src/analytics/reporter.rs` — aggregation and reporting:
   - Group by command type, calculate totals
   - Rank by token savings potential
   - Trend analysis (daily, weekly)
-- [ ] Implement CLI subcommands in `src/cli/commands.rs`:
+- [x] Implement CLI subcommands in `src/cli/mod.rs`:
   - `terse stats` — top commands by token usage, total savings, path distribution (fast/smart/passthrough %)
   - `terse analyze --days N` — time-based analysis with trends
   - `terse discover` — find high-frequency unoptimized commands (candidates for new rule-based optimizers)
   - `terse test "command"` — preview optimization (from Phase 4)
   - `terse health` — check Ollama status, model availability, hook registration
-- [ ] Add terminal table formatting with `colored` crate for readable output
-- [ ] Export options: `--format json` and `--format csv` for all analytics commands
+- [x] Add terminal table formatting with `colored` crate for readable output
+- [x] Export options: `--format json` and `--format csv` for all analytics commands
+- [x] Implement `src/analytics/events.rs` — raw hook event logger (`~/.terse/events.jsonl`) capturing every hook invocation for discovery
 
 **Example Output:**
 

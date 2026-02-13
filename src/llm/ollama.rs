@@ -82,11 +82,15 @@ impl OllamaClient {
 
     /// Check whether Ollama is reachable and has at least one model loaded.
     ///
-    /// Uses a short timeout (2 s) so the hook doesn't stall if Ollama is down.
+    /// Uses a short timeout (5 s) so the hook doesn't stall if Ollama is down.
+    /// Resolves `localhost` to `127.0.0.1` to avoid IPv6 DNS delays on Windows.
     pub fn is_healthy(&self) -> bool {
         let url = format!("{}/api/tags", self.base_url);
+        // On Windows, "localhost" may try IPv6 (::1) first, causing delays
+        // when Ollama only binds to IPv4. Use 127.0.0.1 directly.
+        let url = url.replace("://localhost", "://127.0.0.1");
         let result = ureq::get(&url)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(5))
             .call();
 
         match result {
@@ -110,6 +114,8 @@ impl OllamaClient {
     /// capped at 2048 tokens — we want the response shorter than the original.
     pub fn generate(&self, prompt: &str) -> Result<String> {
         let url = format!("{}/api/generate", self.base_url);
+        // On Windows, "localhost" may try IPv6 (::1) first, causing timeouts.
+        let url = url.replace("://localhost", "://127.0.0.1");
 
         let token_budget = estimate_response_budget(prompt);
 

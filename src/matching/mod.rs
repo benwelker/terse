@@ -1,30 +1,30 @@
-/// Command matching engine for extracting and normalizing commands.
-///
-/// Claude Code often wraps commands with `cd`, `&&` chains, environment variable
-/// prefixes, subshell wrappers, or `sh -c` invocations. This module extracts the
-/// core command for **matching purposes only** while the full original command is
-/// always preserved for execution.
-///
-/// # Design
-///
-/// The matching engine is used in two places:
-/// 1. **Hook** (`terse hook`): determines if any optimizer can handle the command
-///    and whether the command is already a terse invocation (loop guard).
-/// 2. **Optimizers**: `can_handle()` and `execute_and_optimize()` use the extracted
-///    core command for decision-making while passing the full original command to
-///    `run_shell_command()` so that `cd`, env vars, pipes, etc. execute correctly.
-///
-/// # Example
-///
-/// ```
-/// use terse::matching::extract_core_command;
-///
-/// // Claude sends: cd /repo && LANG=C git status
-/// // Matching engine extracts: git status
-/// // But terse rewrites: terse.exe run "cd /repo && LANG=C git status"
-/// // So the full command executes in the correct directory with the env var.
-/// assert_eq!(extract_core_command("cd /repo && LANG=C git status"), "git status");
-/// ```
+//! Command matching engine for extracting and normalizing commands.
+//!
+//! Claude Code often wraps commands with `cd`, `&&` chains, environment variable
+//! prefixes, subshell wrappers, or `sh -c` invocations. This module extracts the
+//! core command for **matching purposes only** while the full original command is
+//! always preserved for execution.
+//!
+//! # Design
+//!
+//! The matching engine is used in two places:
+//! 1. **Hook** (`terse hook`): determines if any optimizer can handle the command
+//!    and whether the command is already a terse invocation (loop guard).
+//! 2. **Optimizers**: `can_handle()` and `execute_and_optimize()` use the extracted
+//!    core command for decision-making while passing the full original command to
+//!    `run_shell_command()` so that `cd`, env vars, pipes, etc. execute correctly.
+//!
+//! # Example
+//!
+//! ```
+//! use terse::matching::extract_core_command;
+//!
+//! // Claude sends: cd /repo && LANG=C git status
+//! // Matching engine extracts: git status
+//! // But terse rewrites: terse.exe run "cd /repo && LANG=C git status"
+//! // So the full command executes in the correct directory with the env var.
+//! assert_eq!(extract_core_command("cd /repo && LANG=C git status"), "git status");
+//! ```
 
 /// Extract the core executable command from a shell invocation.
 ///

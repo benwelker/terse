@@ -31,7 +31,34 @@ enum Commands {
         args: Vec<String>,
     },
     /// Show token savings statistics
-    Stats,
+    Stats {
+        /// Output format: table (default), json, csv
+        #[arg(long, default_value = "table")]
+        format: String,
+        /// Only include the last N days of data
+        #[arg(long)]
+        days: Option<u32>,
+    },
+    /// Analyze time-based trends in token savings
+    Analyze {
+        /// Number of days to analyze (default: 7)
+        #[arg(long, default_value = "7")]
+        days: u32,
+        /// Output format: table (default), json, csv
+        #[arg(long, default_value = "table")]
+        format: String,
+    },
+    /// Discover high-frequency commands not yet on the fast path
+    Discover {
+        /// Output format: table (default), json, csv
+        #[arg(long, default_value = "table")]
+        format: String,
+        /// Only include the last N days of data
+        #[arg(long)]
+        days: Option<u32>,
+    },
+    /// Check system health: Ollama, config, circuit breaker
+    Health,
     /// Preview optimization for a command — show path selection and optimized output
     Test {
         /// The command to preview
@@ -49,7 +76,19 @@ fn main() -> Result<()> {
             let command = args.join(" ");
             run::execute(&command)
         }
-        Commands::Stats => cli::run_stats(),
+        Commands::Stats { format, days } => {
+            let fmt = cli::OutputFormat::from_str_opt(Some(&format));
+            cli::run_stats(fmt, days)
+        }
+        Commands::Analyze { days, format } => {
+            let fmt = cli::OutputFormat::from_str_opt(Some(&format));
+            cli::run_analyze(days, fmt)
+        }
+        Commands::Discover { format, days } => {
+            let fmt = cli::OutputFormat::from_str_opt(Some(&format));
+            cli::run_discover(fmt, days)
+        }
+        Commands::Health => cli::run_health(),
         Commands::Test { args } => {
             let command = args.join(" ");
             cli::run_test(&command)

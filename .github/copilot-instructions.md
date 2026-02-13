@@ -69,11 +69,12 @@ Register new optimizers in `OptimizerRegistry::new()`. Two strategies: command s
 
 ## Implementation Status
 
-Phases 1–4 complete (hook, git optimizer, matching engine, LLM smart path, router, circuit breaker). Phase 5 partial (logger done, CLI stubs). Phases 6–12 not started. See [TERSE-FINAL-Plan.md](.claude/plans/TERSE-FINAL-Plan.md) for the full roadmap.
+Phases 1–5 complete (hook, git optimizer, matching engine, LLM smart path, router, circuit breaker, analytics & CLI). Phases 6–12 not started. See [TERSE-FINAL-Plan.md](.claude/plans/TERSE-FINAL-Plan.md) for the full roadmap.
 
 ## Runtime Files
 
 - Config: `~/.terse/config.json`
-- Logs: `~/.terse/command-log.jsonl`
+- Command log: `~/.terse/command-log.jsonl`
+- Event log: `~/.terse/events.jsonl`
 - Circuit breaker: `~/.terse/circuit-breaker.json`
 - Hook registration: `~/.claude/settings.json`
