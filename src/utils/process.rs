@@ -6,7 +6,9 @@ use anyhow::{Context, Result};
 pub struct ProcessOutput {
     pub stdout: String,
     pub stderr: String,
+    #[allow(dead_code)]
     pub exit_code: Option<i32>,
+    #[allow(dead_code)]
     pub success: bool,
 }
 
