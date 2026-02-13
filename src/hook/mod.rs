@@ -6,17 +6,15 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 
 use crate::hook::protocol::{HookRequest, HookResponse};
-use crate::llm;
-use crate::matching;
-use crate::optimizers::OptimizerRegistry;
+use crate::router::{self, HookDecision};
 
 pub mod protocol;
 
 /// Entry point for `terse hook` — the PreToolUse handler.
 ///
-/// Reads the Claude Code hook JSON from stdin, decides whether the command
-/// can be optimized, and writes a JSON response to stdout:
-/// - Passthrough (`{}`) for unrecognized or non-Bash commands.
+/// Reads the Claude Code hook JSON from stdin, delegates the routing decision
+/// to the [`router`](crate::router), and writes a JSON response to stdout:
+/// - Passthrough (`{}`) for commands the router cannot or should not optimize.
 /// - Rewrite (`hookSpecificOutput.updatedInput`) to route the command
 ///   through `terse run`, which executes and optimizes it.
 pub fn run() -> Result<()> {
@@ -65,36 +63,22 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
         return Ok(HookResponse::passthrough());
     };
 
-    // Prevent infinite loop: if the command is already a terse invocation, pass through.
-    if matching::is_terse_invocation(command) {
-        log_hook_event("command is already a terse invocation; passthrough");
-        return Ok(HookResponse::passthrough());
-    }
+    // Delegate the routing decision to the central router.
+    let decision = router::decide_hook(command);
 
-    // Heredocs embed multi-line content inline — never rewrite these.
-    if matching::contains_heredoc(command) {
-        log_hook_event("command contains heredoc; passthrough");
-        return Ok(HookResponse::passthrough());
+    match &decision {
+        HookDecision::Rewrite { expected_path } => {
+            let rewritten = build_rewrite_command(command)?;
+            log_hook_event(&format!(
+                "router decided rewrite (expected: {expected_path}); command: {rewritten}"
+            ));
+            Ok(HookResponse::rewrite(&rewritten))
+        }
+        HookDecision::Passthrough(reason) => {
+            log_hook_event(&format!("router decided passthrough ({reason})"));
+            Ok(HookResponse::passthrough())
+        }
     }
-
-    let registry = OptimizerRegistry::new();
-    if registry.can_handle(command) {
-        let rewritten = build_rewrite_command(command)?;
-        log_hook_event(&format!("optimizer matched; rewriting to: {rewritten}"));
-        return Ok(HookResponse::rewrite(&rewritten));
-    }
-
-    // No rule-based optimizer — check if the LLM smart path can handle it.
-    // The hook only checks availability (feature flag + Ollama health); the
-    // actual output-size decision is deferred to `terse run` (post-execution).
-    if llm::is_smart_path_available() {
-        let rewritten = build_rewrite_command(command)?;
-        log_hook_event(&format!("smart path available; rewriting to: {rewritten}"));
-        return Ok(HookResponse::rewrite(&rewritten));
-    }
-
-    log_hook_event("no optimizer or smart path available; passthrough");
-    Ok(HookResponse::passthrough())
 }
 
 /// Build the rewritten command that routes execution through `terse run`.

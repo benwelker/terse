@@ -7,7 +7,9 @@ mod hook;
 mod llm;
 mod matching;
 mod optimizers;
+mod router;
 mod run;
+mod safety;
 mod utils;
 
 #[derive(Debug, Parser)]
@@ -30,6 +32,12 @@ enum Commands {
     },
     /// Show token savings statistics
     Stats,
+    /// Preview optimization for a command — show path selection and optimized output
+    Test {
+        /// The command to preview
+        #[arg(trailing_var_arg = true, required = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -42,5 +50,9 @@ fn main() -> Result<()> {
             run::execute(&command)
         }
         Commands::Stats => cli::run_stats(),
+        Commands::Test { args } => {
+            let command = args.join(" ");
+            cli::run_test(&command)
+        }
     }
 }

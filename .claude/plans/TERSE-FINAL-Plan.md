@@ -405,7 +405,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 - [ ] Implement `src/safety/classifier.rs` — command classification:
   - **Passthrough list** (never optimize): `rm`, `mv`, `code`, `vim`, `nano`, `>`, `>>`
-  - **Always optimize**: read-only commands (`git status`, `ls`, `grep`, `cat`, `docker ps`)
+  - **Always optimize**: read-only commands (`git status`, `ls`, `grep`, `cat`, `docker ps`, `dotnet build`, `npm build`)
   - **Configurable**: everything else
 - [ ] Implement `src/router/decision.rs`:
   - `enum OptimizationPath { FastPath, SmartPath, Passthrough }`
@@ -447,6 +447,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 - [ ] Implement `src/analytics/logger.rs` — structured JSONL logging:
   - Fields: timestamp, command, path_selected, optimizer_used, original_tokens, optimized_tokens, savings_pct, latency_ms, success
+  - Log all tools/commands for research. Include tool/command name and tokens. This will be used to find tools/commands we can add as future enchancements.
 - [ ] Implement `src/analytics/reporter.rs` — aggregation and reporting:
   - Group by command type, calculate totals
   - Rank by token savings potential
@@ -582,8 +583,7 @@ Total Tokens Saved: 29,880 (78.4% average)
   - `wc` → single-line result
 - [ ] Implement `src/optimizers/build.rs`:
   - `npm test`/`cargo test`/`dotnet test` → show failures only, pass/fail summary
-  - `npm install`/`cargo build` → success/fail + error details only
-  - `make` → strip verbose lines, keep targets and errors
+  - `npm install`/`cargo build`/`dotnet build` → success/fail + error details only
 - [ ] Implement `src/optimizers/docker.rs`:
   - `docker ps` → compact table (name, image, status, ports)
   - `docker images` → compact list (repo, tag, size)

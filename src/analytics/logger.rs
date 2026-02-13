@@ -20,6 +20,7 @@ pub struct CommandLogEntry {
 }
 
 /// Log a command result with optional LLM latency.
+#[allow(dead_code)]
 pub fn log_command_result(
     command: &str,
     original_tokens: usize,
