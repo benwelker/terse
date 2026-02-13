@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 
 use crate::hook::protocol::{HookRequest, HookResponse};
+use crate::llm;
 use crate::matching;
 use crate::optimizers::OptimizerRegistry;
 
@@ -83,7 +84,16 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
         return Ok(HookResponse::rewrite(&rewritten));
     }
 
-    log_hook_event("no optimizer matched; passthrough");
+    // No rule-based optimizer — check if the LLM smart path can handle it.
+    // The hook only checks availability (feature flag + Ollama health); the
+    // actual output-size decision is deferred to `terse run` (post-execution).
+    if llm::is_smart_path_available() {
+        let rewritten = build_rewrite_command(command)?;
+        log_hook_event(&format!("smart path available; rewriting to: {rewritten}"));
+        return Ok(HookResponse::rewrite(&rewritten));
+    }
+
+    log_hook_event("no optimizer or smart path available; passthrough");
     Ok(HookResponse::passthrough())
 }
 

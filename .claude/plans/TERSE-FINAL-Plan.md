@@ -341,6 +341,13 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 **Deliverables:**
 
 - [ ] Add `ureq` (sync HTTP with JSON feature) to `Cargo.toml`
+- [ ] Implement **runtime feature flag** for the LLM Smart Path:
+  - Default: **disabled** (opt-in). The smart path must be explicitly enabled.
+  - **Environment variable**: `TERSE_SMART_PATH=1` (or `true`) to enable, `0`/`false`/unset to disable.
+  - **JSON config file**: `~/.terse/config.json` with `{ "smart_path": { "enabled": true } }`.
+  - **Precedence**: env var > JSON config > default (disabled).
+  - Implement in `src/llm/config.rs` — `SmartPathConfig` struct with `load()` method.
+  - All LLM code paths check `SmartPathConfig::load().enabled` before activating.
 - [ ] Implement `src/llm/ollama.rs`:
   - `POST http://localhost:11434/api/generate` with model, prompt, stream=false
   - Configurable model name (default: `llama3.2:1b`)
@@ -360,7 +367,10 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
   - Check response is shorter than original (sanity)
   - Check for common hallucination markers (fabricated paths, invented status)
   - If validation fails → fall back to raw output
-- [ ] Wire LLM into hook flow: no rule-based optimizer + output > 200 chars → send to LLM
+- [ ] Wire LLM into **both** hook and run flows (two-level routing per execution model):
+  - **Hook level** (`src/hook/mod.rs`): After checking rule-based optimizers, also check if smart path is enabled AND Ollama is healthy. If so, rewrite to `terse run` even though no rule-based optimizer matched. The hook **cannot** check output size — it runs pre-execution.
+  - **Run level** (`src/run/mod.rs`): After executing the command raw (when no optimizer matched), check output size. If output > `min_output_chars` (default 200) AND smart path is enabled AND Ollama is available → send to LLM. If output < 100 chars → passthrough (not worth optimizing).
+  - This two-level split aligns with the Core Architecture execution model where the hook makes the pre-execution rewrite decision and `terse run` makes the post-execution optimization decision.
 - [ ] Log LLM path usage: command, latency, tokens saved, model used
 - [ ] Write integration tests (gated behind `#[cfg(feature = "llm-tests")]` or environment variable)
 

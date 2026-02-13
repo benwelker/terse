@@ -14,13 +14,28 @@ pub struct CommandLogEntry {
     pub optimized_tokens: usize,
     pub savings_pct: f64,
     pub optimizer_used: String,
+    /// LLM latency in milliseconds (only set for smart-path calls).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
 }
 
+/// Log a command result with optional LLM latency.
 pub fn log_command_result(
     command: &str,
     original_tokens: usize,
     optimized_tokens: usize,
     optimizer_used: &str,
+) {
+    log_command_result_with_latency(command, original_tokens, optimized_tokens, optimizer_used, None)
+}
+
+/// Log a command result including LLM latency.
+pub fn log_command_result_with_latency(
+    command: &str,
+    original_tokens: usize,
+    optimized_tokens: usize,
+    optimizer_used: &str,
+    latency_ms: Option<u64>,
 ) {
     let savings_pct = if original_tokens == 0 {
         0.0
@@ -35,6 +50,7 @@ pub fn log_command_result(
         optimized_tokens,
         savings_pct,
         optimizer_used: optimizer_used.to_string(),
+        latency_ms,
     };
 
     let _ = append_log_entry(&entry);

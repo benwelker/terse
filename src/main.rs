@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 mod analytics;
 mod cli;
 mod hook;
+mod llm;
 mod matching;
 mod optimizers;
 mod run;
