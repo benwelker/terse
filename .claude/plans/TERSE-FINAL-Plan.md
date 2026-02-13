@@ -1,0 +1,893 @@
+# TERSE — Unified Implementation Plan
+
+## Token Efficiency through Refined Stream Engineering
+
+---
+
+## Project Overview
+
+**Name:** TERSE (Token Efficiency through Refined Stream Engineering)
+
+**Purpose:** Single Rust binary that intercepts AI coding assistant commands, optimizes outputs via fast rule-based optimizers AND a local LLM smart path (Ollama HTTP API), and reduces token consumption by 60–80%.
+
+**Architecture:** Single Rust binary with dual optimization paths. Rule-based fast path (<20ms) for known commands, LLM smart path (<2s via Ollama HTTP API) for unknown/complex commands, intelligent router selects automatically.
+
+**Primary Target:** Claude Code (via hooks/plugins)
+
+**Future Targets:** GitHub Copilot CLI, other AI coding assistants
+
+**Platform Support:** Windows (Phase 1), macOS & Linux (Phase 10)
+
+**Tech Stack:** Rust (performance + cross-platform + single binary distribution)
+
+**LLM Integration:** Ollama HTTP API called directly from Rust via `ureq` (sync HTTP client) — core feature
+
+---
+
+## Strategic Approach
+
+### Why This Architecture:
+
+- **Performance:** Rule-based optimizers execute in <20ms for known commands
+- **Universal coverage:** LLM smart path handles any unknown command intelligently
+- **Simplicity:** One binary, one language, one artifact to distribute
+- **Ollama HTTP API:** Rust calls `localhost:11434` directly via `ureq` (sync HTTP) — no async runtime needed
+- **Beginner-friendly Rust:** Phases introduce Rust concepts incrementally
+- **Dual-path design:** Speed of rule-based optimizers for common commands + intelligence of LLM for everything else
+
+### Hook-First, Plugin Later:
+
+- Manual hook registration for rapid iteration during development
+- Plugin packaging after core functionality is proven (Phase 11)
+- Minimal refactoring needed to wrap existing binary as plugin
+
+---
+
+## Core Architecture
+
+### Dual-Path Execution Model
+
+```
+Claude Code wants to execute a Bash command
+    ↓
+PreToolUse Hook → terse hook (reads JSON from stdin)
+    ↓
+Step 1 — Safety Classifier (pre-execution):
+  Command is destructive (rm, mv, >, >>)? → Passthrough immediately
+  Command is an editor (code, vim, nano)?  → Passthrough immediately
+    ↓
+Step 2 — Execute the command:
+  Run via std::process::Command, capture stdout + stderr
+    ↓
+Step 3 — Router Decision (post-execution, based on actual output):
+  Output < 100 chars?                      → Passthrough (not worth optimizing)
+  Rule-based optimizer available?           → Fast Path (Rust, <20ms)
+  Ollama available AND output > 200 chars?  → Smart Path (LLM, <2s)
+  None of the above?                        → Passthrough
+    ↓
+Step 4 — Post-Processing:
+  Whitespace cleanup (applied to all optimized output)
+    ↓
+Return JSON to stdout → Claude Code receives optimized result
+```
+
+> **Note on optimization strategies:** Fast-path optimizers may use two techniques:
+>
+> 1. **Command substitution** — run an optimized version of the command (e.g., `git status --short --branch` instead of `git status`). The optimizer runs its own command and returns the result.
+> 2. **Output post-processing** — run the original command as-is and transform the output (e.g., truncating, filtering, reformatting).
+>    Each optimizer chooses the appropriate strategy. The Smart Path (LLM) always uses output post-processing.
+
+### Path Characteristics
+
+**Fast Path (Rule-Based Optimizers):**
+
+- Common commands: git status, ls, docker ps, npm test, dotnet build
+- Predictable output structure, regex-based transformation
+- Speed: <20ms overhead
+- Token savings: 70–90%
+- Deterministic, zero external dependencies
+
+**Smart Path (Local LLM via Ollama):**
+
+- Unknown commands, complex/verbose output, unusual errors
+- Category-aware prompt templates with few-shot examples
+- Speed: <2s warm, <5s cold start
+- Token savings: 60–80%
+- Requires Ollama running with a model pulled
+
+**Passthrough:**
+
+- Critical operations: file edits, destructive commands (rm, mv, >)
+- Tiny outputs: <100 chars
+- Failed optimizations: validation errors, timeouts
+- Zero overhead
+
+### Project Structure
+
+```
+terse/
+├── src/
+│   ├── main.rs               # Entry point, mode routing (hook vs CLI)
+│   ├── lib.rs                 # Shared library re-exports
+│   ├── hook/
+│   │   ├── mod.rs             # Hook mode handler (stdin JSON → stdout JSON)
+│   │   └── protocol.rs       # Claude Code / Copilot hook JSON protocol
+│   ├── cli/
+│   │   ├── mod.rs             # CLI mode handler (clap)
+│   │   └── commands.rs        # Stats, analyze, test, config, health subcommands
+│   ├── router/
+│   │   ├── mod.rs             # Decision engine: fast vs smart vs passthrough
+│   │   └── decision.rs        # Path selection logic + caching
+│   ├── optimizers/
+│   │   ├── mod.rs             # Optimizer registry & trait definition
+│   │   ├── git.rs             # Git command optimizers
+│   │   ├── file.rs            # File operation optimizers (ls, find, cat)
+│   │   ├── build.rs           # Build/test tool optimizers
+│   │   ├── docker.rs          # Container optimizers
+│   │   └── generic.rs         # Whitespace/generic cleanup pass
+│   ├── llm/
+│   │   ├── mod.rs             # LLM client abstraction
+│   │   ├── ollama.rs          # Ollama HTTP API client
+│   │   ├── prompts.rs         # Prompt templates per command category
+│   │   └── validation.rs      # Output validation (length, hallucination check)
+│   ├── analytics/
+│   │   ├── mod.rs             # Analytics engine
+│   │   ├── logger.rs          # Command logging (JSONL)
+│   │   └── reporter.rs        # Stats, reports, discovery
+│   ├── config/
+│   │   ├── mod.rs             # Configuration system
+│   │   └── schema.rs          # Config schema + defaults + hierarchy
+│   ├── safety/
+│   │   ├── mod.rs             # Safety mechanisms
+│   │   ├── circuit_breaker.rs # Circuit breaker pattern
+│   │   └── classifier.rs      # Command classification (safe/critical/passthrough)
+│   └── utils/
+│       ├── mod.rs
+│       ├── process.rs         # Cross-platform subprocess execution
+│       └── token_counter.rs   # Token estimation (char-based heuristic)
+├── tests/
+│   ├── hook_tests.rs          # Hook protocol integration tests
+│   ├── optimizer_tests.rs     # Per-optimizer unit tests
+│   ├── llm_tests.rs           # LLM integration tests (requires Ollama)
+│   └── router_tests.rs        # Router decision tests
+├── .github/
+│   └── workflows/
+│       ├── ci.yml             # Build + test on PR
+│       └── release.yml        # Cross-platform release builds
+├── Cargo.toml
+├── Cargo.lock
+├── README.md
+├── LICENSE (MIT)
+└── CHANGELOG.md
+```
+
+### Runtime File Locations
+
+- Config: `~/.terse/config.toml`
+- Logs: `~/.terse/command-log.jsonl`
+- Binary: `~/.terse/bin/terse[.exe]`
+- Claude settings: `~/.claude/settings.json`
+
+---
+
+## Development Phases
+
+### Phase 1: Rust Foundation + Hook Passthrough (Week 1)
+
+**Goal:** Working binary that hooks into Claude Code, intercepts commands, and passes them through unchanged.
+
+**Rust concepts introduced:** Project setup, modules, serde JSON, stdin/stdout, `Result` types, basic error handling with `anyhow`.
+
+> **Note:** `anyhow` is used for error handling from Phase 1 onward. Phase 9 later refines this with custom error types via `thiserror`.
+
+**Deliverables:**
+
+- [ ] Initialize Rust project: `cargo init terse`
+- [ ] Add dependencies to `Cargo.toml`: `serde`, `serde_json`, `clap` (derive), `chrono`, `dirs`, `anyhow`
+- [ ] Implement `src/main.rs` — detect mode (hook vs CLI) based on subcommand: `terse hook` vs `terse stats`
+- [ ] Implement `src/hook/protocol.rs` — define the Claude Code hook JSON schema:
+  - Input: `{ "tool_name": "Bash", "tool_input": { "command": "git status" } }`
+  - Output: `{ "decision": "block", "stdout": "...", "stderr": "" }` OR empty JSON `{}` for passthrough
+  - **Important:** Verify these structures against the current Claude Code hook documentation before implementing. The schemas above are based on publicly available information and may need adjustment.
+- [ ] Implement `src/hook/mod.rs` — read JSON from stdin, parse command, execute it via `std::process::Command`, return raw output unchanged
+- [ ] Register hook manually in `~/.claude/settings.json`:
+  ```json
+  {
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "%USERPROFILE%\\.terse\\bin\\terse.exe hook"
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+  During development, point to the build output: `C:\source\repos\terse\target\debug\terse.exe hook`
+- [ ] Test: run Claude Code session, verify commands execute normally and output is unchanged
+
+**Success Criteria:**
+
+- Binary compiles and runs
+- Hook intercepts commands successfully
+- Commands pass through unchanged
+- Claude Code session is completely unaffected
+
+---
+
+### Phase 2: Git Optimizer — End-to-End Token Savings (Week 2–3)
+
+**Goal:** Ship the first measurable optimization — git commands producing 60–90% fewer tokens.
+
+**Rust concepts introduced:** Traits, enums, `match`, regex, module organization, `#[cfg(test)]`, unit tests.
+
+> **Routing in this phase:** Before the full router exists (Phase 4), Phases 2–3 use simple direct routing: if a rule-based optimizer matches the command → use it; else if LLM is available (Phase 3+) → use LLM; else → passthrough. Phase 4 replaces this with the full decision engine.
+
+**Deliverables:**
+
+- [ ] Define the `Optimizer` trait in `src/optimizers/mod.rs`:
+  - `fn can_handle(&self, command: &str) -> bool`
+  - `fn optimize(&self, command: &str, raw_output: &str) -> Result<OptimizedOutput>`
+  - `OptimizedOutput` struct: `{ output: String, original_tokens: usize, optimized_tokens: usize }`
+- [ ] Create optimizer registry — a `Vec<Box<dyn Optimizer>>` that tries each in order
+- [ ] Implement `src/optimizers/git.rs` with these sub-optimizers:
+  - `git status` → **command substitution**: run `git status --short --branch` instead, return compact output
+  - `git log` → **command substitution**: run `git log --oneline -n 20` instead, return compact format
+  - `git diff` → **output post-processing**: run original command, reduce context lines, truncate large diffs with summary
+  - `git push/pull/fetch/add/commit` → **output post-processing**: capture output, return 1-line success/failure confirmation
+  - `git branch` → **output post-processing**: compact list, highlight current branch
+- [ ] Implement `src/utils/token_counter.rs` — heuristic: `chars / 4` for token estimation
+- [ ] Implement `src/utils/process.rs` — cross-platform command execution wrapper
+- [ ] Wire optimizers into hook flow: execute command → check optimizer match → return optimized or raw output
+- [ ] Add basic logging to `~/.terse/command-log.jsonl`:
+  - Timestamp, command, original tokens, optimized tokens, savings %, optimizer used
+- [ ] Write unit tests: test each git optimizer against sample outputs, verify token reduction
+- [ ] Manual testing with Claude Code: verify Claude understands optimized git output
+
+**Success Criteria:**
+
+- `git status`, `git log`, `git diff` produce 60–90% fewer tokens
+- Claude Code still understands the optimized output
+- Token savings logged to JSONL file
+- All unit tests pass
+
+---
+
+### Phase 3: LLM Smart Path — Ollama Integration (Week 3–4)
+
+**Goal:** Any command without a rule-based optimizer gets intelligently optimized by a local LLM.
+
+> **Week overlap note:** Phase 3 starts in Week 3 while Phase 2 may still have remaining polish/tests in Week 3. The LLM module (`src/llm/`) is independent of the optimizer module (`src/optimizers/`), so they can be worked on in parallel during the overlap week. By end of Week 4, both paths are operational.
+
+**Rust concepts introduced:** HTTP requests (`ureq`), JSON construction, timeouts, `Option`/`Result` chaining.
+
+**Deliverables:**
+
+- [ ] Add `ureq` (sync HTTP with JSON feature) to `Cargo.toml`
+- [ ] Implement `src/llm/ollama.rs`:
+  - `POST http://localhost:11434/api/generate` with model, prompt, stream=false
+  - Configurable model name (default: `llama3.2:1b`)
+  - Timeout: 5s cold start, 3s warm
+  - Health check: `GET http://localhost:11434/api/tags` to detect Ollama availability
+  - Return `Result<String>` — LLM response text
+- [ ] Implement `src/llm/prompts.rs` — category-aware prompt templates:
+  - **Version control**: "Condense this git output. Keep: branch, changes, conflicts. Remove: verbose messages."
+  - **File operations**: "Condense this directory listing. Keep: paths, sizes. Remove: permissions, timestamps."
+  - **Build/test**: "Condense this build output. Keep: errors, warnings, failures. Remove: passing tests, progress."
+  - **Container tools**: "Condense this Docker output. Keep: running containers, status. Remove: verbose IDs."
+  - **Logs**: "Condense these logs. Keep: errors, warnings, unique messages. Remove: duplicates, debug noise."
+  - **Generic fallback**: "Condense this command output, preserving all critical information for an AI coding assistant."
+  - Each prompt includes few-shot examples and token budget instruction
+- [ ] Implement `src/llm/validation.rs`:
+  - Check LLM response is non-empty
+  - Check response is shorter than original (sanity)
+  - Check for common hallucination markers (fabricated paths, invented status)
+  - If validation fails → fall back to raw output
+- [ ] Wire LLM into hook flow: no rule-based optimizer + output > 200 chars → send to LLM
+- [ ] Log LLM path usage: command, latency, tokens saved, model used
+- [ ] Write integration tests (gated behind `#[cfg(feature = "llm-tests")]` or environment variable)
+
+**Prerequisite:** Ollama installed with `ollama pull llama3.2:1b`
+
+**Recommended Models:**
+
+| Model           | Size  | Speed (CPU) | Speed (GPU) | Quality   | Best For            |
+| --------------- | ----- | ----------- | ----------- | --------- | ------------------- |
+| Llama 3.2 1B ⭐ | 1.3GB | 200–500ms   | 50–150ms    | Excellent | Default, most users |
+| Qwen 2.5 0.5B   | 0.5GB | 100–300ms   | 30–100ms    | Very good | Ultra-low latency   |
+| Phi-3-mini 3.8B | 2.2GB | 400–800ms   | 100–250ms   | Excellent | Quality-first       |
+| Gemma 2 2B      | 1.6GB | 300–600ms   | 80–200ms    | Very good | Balanced            |
+
+**Success Criteria:**
+
+- Commands without rule-based optimizers get LLM optimization
+- Latency <2s warm, <5s cold
+- Token savings 60%+
+- Validation catches bad LLM output and falls back safely
+- Ollama health check detects availability gracefully
+
+---
+
+### Phase 4: Router & Decision Engine (Week 4–5)
+
+**Goal:** Intelligent automatic routing between fast path, smart path, and passthrough.
+
+**Rust concepts introduced:** Enums as decision types, builder pattern, basic caching with TTL.
+
+**Deliverables:**
+
+- [ ] Implement `src/safety/classifier.rs` — command classification:
+  - **Passthrough list** (never optimize): `rm`, `mv`, `code`, `vim`, `nano`, `>`, `>>`
+  - **Always optimize**: read-only commands (`git status`, `ls`, `grep`, `cat`, `docker ps`)
+  - **Configurable**: everything else
+- [ ] Implement `src/router/decision.rs`:
+  - `enum OptimizationPath { FastPath, SmartPath, Passthrough }`
+  - Decision logic:
+    1. Command in passthrough list? → `Passthrough`
+    2. Output < 100 chars? → `Passthrough` (not worth optimizing)
+    3. Rule-based optimizer available? → `FastPath`
+    4. Ollama available AND output > 200 chars? → `SmartPath`
+    5. Else → `Passthrough`
+  - Cache recent decisions (command pattern → path) with 5-minute TTL
+- [ ] Implement `src/router/mod.rs` — orchestrate the full flow:
+  - Classify command → select path → execute optimizer → validate → return
+  - Log path decision with every command
+- [ ] Implement `src/safety/circuit_breaker.rs`:
+  - Track failure rate per path (not global — if LLM is down, fast path still works)
+  - If >20% failures in last 10 commands → disable that path for 10 minutes
+  - Auto-resume after cooldown
+  - Log circuit breaker state changes
+- [ ] Update hook handler to use router instead of direct optimizer calls
+- [ ] Add `terse test "command"` CLI subcommand — show which path would be selected and preview optimized output
+- [ ] Write router decision tests with various command/output combinations
+
+**Success Criteria:**
+
+- Router correctly selects optimal path 95%+ of the time
+- Fast path used for known commands, smart path for unknown, passthrough for small/critical
+- Circuit breaker protects against cascading failures per path independently
+- `terse test` provides useful preview for debugging
+
+---
+
+### Phase 5: Analytics & CLI (Week 5–6)
+
+**Goal:** Data-driven visibility into what TERSE is doing and where to optimize next.
+
+**Rust concepts introduced:** `HashMap`/`BTreeMap`, iterators, functional chaining, formatted output, `colored` crate.
+
+**Deliverables:**
+
+- [ ] Implement `src/analytics/logger.rs` — structured JSONL logging:
+  - Fields: timestamp, command, path_selected, optimizer_used, original_tokens, optimized_tokens, savings_pct, latency_ms, success
+- [ ] Implement `src/analytics/reporter.rs` — aggregation and reporting:
+  - Group by command type, calculate totals
+  - Rank by token savings potential
+  - Trend analysis (daily, weekly)
+- [ ] Implement CLI subcommands in `src/cli/commands.rs`:
+  - `terse stats` — top commands by token usage, total savings, path distribution (fast/smart/passthrough %)
+  - `terse analyze --days N` — time-based analysis with trends
+  - `terse discover` — find high-frequency unoptimized commands (candidates for new rule-based optimizers)
+  - `terse test "command"` — preview optimization (from Phase 4)
+  - `terse health` — check Ollama status, model availability, hook registration
+- [ ] Add terminal table formatting with `colored` crate for readable output
+- [ ] Export options: `--format json` and `--format csv` for all analytics commands
+
+**Example Output:**
+
+```bash
+$ terse stats
+╔════════════════════╦═══════╦═══════════╦══════════╗
+║ Command            ║ Count ║ Tokens    ║ Savings  ║
+╠════════════════════╬═══════╬═══════════╬══════════╣
+║ git status         ║   142 ║     8,520 ║  87.3%   ║
+║ git log            ║    89 ║    12,460 ║  91.2%   ║
+║ npm test (LLM)     ║    34 ║     6,800 ║  64.1%   ║
+║ docker ps (LLM)    ║    21 ║     2,100 ║  72.5%   ║
+╚════════════════════╩═══════╩═══════════╩══════════╝
+Path Distribution: Fast 62% | Smart 23% | Passthrough 15%
+Total Tokens Saved: 29,880 (78.4% average)
+```
+
+**Success Criteria:**
+
+- Clear visibility into token savings, path distribution, and optimization opportunities
+- `terse discover` identifies the next best rule-based optimizer to build
+- Export formats work for further analysis
+
+---
+
+### Phase 6: Configuration System (Week 6–7)
+
+**Goal:** User control over all behavior without code changes.
+
+**Rust concepts introduced:** TOML parsing (`toml` crate), config hierarchy, path handling, default values.
+
+**Deliverables:**
+
+- [ ] Add `toml` crate to `Cargo.toml`
+- [ ] Implement `src/config/schema.rs` — full config schema with defaults:
+
+  ```toml
+  [general]
+  enabled = true
+  mode = "hybrid"  # hybrid | fast-only | smart-only | passthrough
+  # profile = "balanced"  # fast | balanced | quality (optional preset)
+
+  [fast_path]
+  enabled = true
+  timeout_ms = 100
+
+  [fast_path.optimizers]
+  git = true
+  file = true
+  build = true
+  docker = true
+  whitespace = true
+
+  [smart_path]
+  enabled = true
+  model = "llama3.2:1b"
+  temperature = 0.0
+  min_output_chars = 200
+  max_latency_ms = 3000
+  ollama_url = "http://localhost:11434"
+  # runtime = "ollama"  # Reserved for Phase 12: future values "llama-cpp", "openai-compat"
+
+  [router]
+  decision_cache_ttl_secs = 300
+  circuit_breaker_threshold = 0.2
+  circuit_breaker_window = 10
+  circuit_breaker_cooldown_secs = 600
+
+  [passthrough]
+  commands = ["code", "vim", "nano", "rm", "mv"]
+
+  [logging]
+  enabled = true
+  path = "~/.terse/command-log.jsonl"
+  level = "info"
+
+  [whitespace]
+  enabled = true
+  max_consecutive_newlines = 2
+  normalize_tabs = true
+  trim_trailing = true
+  ```
+
+- [ ] Implement `src/config/mod.rs` — config hierarchy:
+  - Built-in defaults → `~/.terse/config.toml` (user global) → `.terse.toml` (project local)
+  - Later entries override earlier ones
+- [ ] Add CLI config commands:
+  - `terse config show` — display effective config
+  - `terse config init` — create default config file
+  - `terse config set <key> <value>` — update a setting
+  - `terse config reset` — reset to defaults
+- [ ] Add performance profiles as named presets:
+  - **fast**: prefers fast path, smart path min 1000 chars, timeout 50ms
+  - **balanced**: default settings
+  - **quality**: prefers smart path, min 200 chars, higher LLM timeout
+  - Activated via: `terse config set general.profile balanced`
+
+**Success Criteria:**
+
+- Users can customize all behavior via TOML config
+- Project-level overrides work (`.terse.toml` in repo root)
+- Config changes take effect immediately (no restart)
+- Performance profiles cover common use cases
+
+---
+
+### Phase 7: Expanded Optimizers (Week 7–8)
+
+**Goal:** Cover 80%+ of commands by frequency with rule-based fast path.
+
+**Rust concepts introduced:** Code organization at scale, DRY refactoring, trait objects, advanced pattern matching.
+
+**Strategy:** Use `terse discover` output from Phase 5 to prioritize which optimizers to build next.
+
+**Deliverables:**
+
+- [ ] Implement `src/optimizers/file.rs`:
+  - `ls`/`dir` → tree-like compact format, limit to N items
+  - `find` → compact paths, group by directory
+  - `cat`/`type` → truncate long files with line count summary
+  - `wc` → single-line result
+- [ ] Implement `src/optimizers/build.rs`:
+  - `npm test`/`cargo test`/`dotnet test` → show failures only, pass/fail summary
+  - `npm install`/`cargo build` → success/fail + error details only
+  - `make` → strip verbose lines, keep targets and errors
+- [ ] Implement `src/optimizers/docker.rs`:
+  - `docker ps` → compact table (name, image, status, ports)
+  - `docker images` → compact list (repo, tag, size)
+  - `docker logs` → tail + error extraction
+- [ ] Implement `src/optimizers/generic.rs` — whitespace optimization pass:
+  - Max 2 consecutive newlines
+  - Normalize tabs to spaces
+  - Remove trailing whitespace
+  - Trim leading/trailing blank lines
+  - Applied as post-processing after any optimizer (including LLM output)
+- [ ] Update optimizer registry to include all new modules
+- [ ] Write unit tests for each optimizer against sample outputs
+- [ ] Before/after token comparison documentation
+
+**Success Criteria:**
+
+- 80%+ of command frequency covered by fast path
+- Average 60%+ savings per new optimizer
+- All tests pass
+- `terse discover` shows diminishing returns (most high-value commands covered)
+
+---
+
+### Phase 8: Prompt Engineering & LLM Quality (Week 8–9)
+
+**Goal:** Maximize LLM smart path quality and minimize hallucination.
+
+**Rust concepts introduced:** String templating, structured output parsing, enum-based command categorization.
+
+**Deliverables:**
+
+- [ ] Refine prompt templates based on real-world analytics data:
+  - Analyze which commands hit the smart path most via `terse stats`
+  - Create category-specific prompts with few-shot examples
+  - Add self-verification instructions: "Check: is your output shorter? Did you preserve all errors/warnings?"
+- [ ] Implement A/B prompt comparison:
+  - `terse test --compare "command"` — run multiple prompt variants, show side-by-side
+- [ ] Add structured output format option — prompt LLM for JSON when beneficial:
+  - `{"summary": "...", "errors": [...], "warnings": [...], "details": "..."}`
+- [ ] Improve validation:
+  - Compare key tokens (file paths, error codes) between raw and LLM output
+  - Detect when LLM invents content not in the original
+  - Track validation failure rate in analytics
+- [ ] Experiment with model sizes and document benchmarks:
+  - `llama3.2:1b` (default, fast)
+  - `qwen2.5:0.5b` (ultra-fast)
+  - `phi3:mini` (higher quality)
+
+**Success Criteria:**
+
+- Hallucination rate <1%
+- Smart path token savings 65%+
+- Validation catches 95%+ of bad outputs
+- Prompt benchmarks documented for model selection guidance
+
+---
+
+### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10)
+
+**Goal:** Bulletproof error handling — TERSE never breaks a Claude Code session.
+
+**Rust concepts introduced:** Custom error types with `thiserror` crate, `Drop` trait for cleanup, structured error hierarchies.
+
+> **Note:** Basic error handling with `anyhow` has been in use since Phase 1. This phase upgrades to a structured error taxonomy with `thiserror`, adds safety mechanisms (safe mode, rate limiting, sensitive data detection), and creates the comprehensive integration test suite.
+
+**Deliverables:**
+
+- [ ] Implement comprehensive error taxonomy with `thiserror`:
+  - `HookError`, `OptimizerError`, `LlmError`, `ConfigError`, `RouterError`
+  - All errors result in graceful passthrough (return raw output)
+  - Replace ad-hoc `anyhow` usage in earlier phases with these typed errors where beneficial
+- [ ] Implement safe mode:
+  - Environment variable: `TERSE_SAFE_MODE=1`
+  - Config: `general.safe_mode = true`
+  - Disables all optimization, logs only
+- [ ] Rate limiting for LLM path:
+  - Max N concurrent LLM requests (default: 1)
+  - Queue additional requests with timeout
+- [ ] Sensitive data detection in `src/safety/classifier.rs`:
+  - Skip optimization if output contains patterns: API keys, passwords, tokens
+  - Configurable pattern list
+- [ ] Automatic hook health monitoring:
+  - Track consecutive failures
+  - Log warnings to stderr (visible in Claude Code)
+  - Circuit breaker disables paths, not the entire hook
+- [ ] Integration test suite — end-to-end scenarios:
+  - Happy path (optimizer succeeds)
+  - LLM timeout (falls back to raw)
+  - LLM hallucination (validation catches, falls back)
+  - Ollama not running (skips smart path, fast path still works)
+  - Malformed input (returns passthrough)
+  - Very large output (truncation handling)
+- [ ] Edge case tests: binary output, unicode, empty output, extremely long commands
+
+**Success Criteria:**
+
+- Zero Claude Code session disruptions
+- All failures result in usable output (graceful passthrough)
+- Circuit breaker auto-recovers
+- <0.1% hook failure rate
+- Safe mode provides escape hatch
+
+---
+
+### Phase 10: Cross-Platform & CI/CD (Week 10–11)
+
+**Goal:** Build and distribute for Windows, macOS, and Linux.
+
+**Rust concepts introduced:** Conditional compilation (`#[cfg]`), platform abstractions, GitHub Actions matrix builds.
+
+**Deliverables:**
+
+- [ ] Platform-specific command handling in `src/utils/process.rs`:
+  - Windows `dir` ↔ Unix `ls`
+  - Windows `type` ↔ Unix `cat`
+  - Path separator normalization
+- [ ] Platform-specific optimizer logic using `#[cfg(target_os = "...")]` where needed
+- [ ] GitHub Actions CI workflow (`.github/workflows/ci.yml`):
+  - Run `cargo test`, `cargo clippy`, `cargo fmt --check` on PR
+  - Matrix: windows-latest, macos-latest, ubuntu-latest
+- [ ] GitHub Actions release workflow (`.github/workflows/release.yml`):
+  - Trigger on tag push (`v*`)
+  - Build matrix:
+    - `x86_64-pc-windows-msvc` (Windows x64)
+    - `x86_64-apple-darwin` (macOS x64)
+    - `aarch64-apple-darwin` (macOS ARM64)
+    - `x86_64-unknown-linux-gnu` (Linux x64)
+  - Upload binaries as release assets
+- [ ] Installation scripts:
+  - `install.ps1` (Windows PowerShell)
+  - `install.sh` (macOS/Linux)
+  - Both: download binary → place in `~/.terse/bin/` → create default config → check Ollama → register hook
+- [ ] Platform-specific test suite
+
+**Success Criteria:**
+
+- Single codebase produces working binaries for all three platforms
+- CI tests pass on all platforms
+- One-command install on each OS
+- Installation scripts handle Ollama detection and hook registration
+
+---
+
+### Phase 11: Claude Code Plugin Packaging (Week 11–12)
+
+**Goal:** Distribute as an official Claude Code plugin for one-command install.
+
+**Deliverables:**
+
+- [ ] Create `.claude-plugin/plugin.json` manifest:
+  ```json
+  {
+    "name": "terse",
+    "version": "1.0.0",
+    "description": "Token Efficiency through Refined Stream Engineering - Reduce token usage by 60-80%",
+    "author": "Benjamin Welker",
+    "license": "MIT",
+    "hooks": {
+      "PreToolUse": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "${PLUGIN_DIR}/bin/terse${EXE_SUFFIX} hook",
+              "platforms": ["win32", "darwin", "linux"]
+            }
+          ]
+        }
+      ]
+    },
+    "commands": [
+      {
+        "name": "stats",
+        "description": "Show token savings statistics",
+        "script": "${PLUGIN_DIR}/bin/terse${EXE_SUFFIX} stats"
+      },
+      {
+        "name": "analyze",
+        "description": "Analyze usage patterns",
+        "script": "${PLUGIN_DIR}/bin/terse${EXE_SUFFIX} analyze"
+      },
+      {
+        "name": "health",
+        "description": "Check system health",
+        "script": "${PLUGIN_DIR}/bin/terse${EXE_SUFFIX} health"
+      }
+    ],
+    "setup": {
+      "script": "${PLUGIN_DIR}/setup.sh",
+      "description": "Downloads LLM model and validates installation"
+    }
+  }
+  ```
+- [ ] Bundle pre-built binaries per platform in `bin/` directory
+- [ ] Add setup script: check Ollama, download model, validate installation
+- [ ] Test with `claude --plugin-dir ./terse`
+- [ ] Publish to personal GitHub plugin marketplace
+- [ ] Submit to community registries
+- [ ] Comprehensive README: features, installation, configuration reference, troubleshooting
+
+**Success Criteria:**
+
+- `claude plugin install terse` works
+- No manual settings.json editing needed
+- Setup handles Ollama model download
+- Plugin appears in Claude Code, commands accessible via `/terse:stats`
+
+---
+
+### Phase 12: Copilot CLI Support & Advanced Features (Week 12+)
+
+**Goal:** Expand to other AI coding assistants and add advanced capabilities.
+
+**Deliverables:**
+
+- [ ] **Copilot CLI investigation** — research hook/extension points, add protocol adapter if different from Claude Code
+- [ ] **Context-aware routing** — detect debugging vs exploration vs refactoring from recent command history; adjust optimization aggressiveness:
+  - Debugging: preserve more detail, lower smart path threshold
+  - Exploration: aggressive optimization, prefer fast path
+  - Refactoring: balanced approach
+- [ ] **Adaptive learning** — track which path produces better results per command, adjust routing decisions over time
+- [ ] **Model flexibility** — support additional LLM backends beyond Ollama:
+  - `llama-cpp` (llama.cpp HTTP server — alternative self-hosted LLM server)
+  - `openai-compat` (OpenAI-compatible APIs: LM Studio, LocalAI, etc.)
+  - Configuration: `smart_path.runtime = "ollama" | "llama-cpp" | "openai-compat"`
+- [ ] **Team config sharing** — project-level `.terse.toml` committed to repo for shared settings
+- [ ] **Web dashboard** — optional local web UI for analytics visualization
+- [ ] **Multi-step optimization** — use tool-calling models to execute follow-up commands and combine outputs
+- [ ] **Fallback chaining** — try fast path → if fails, try smart path → if fails, passthrough (maximizes success rate)
+
+---
+
+## Success Metrics
+
+### Technical Metrics
+
+| Metric                       | Target                                 |
+| ---------------------------- | -------------------------------------- |
+| Token Reduction              | 60–80% average                         |
+| Fast Path Latency            | <20ms average                          |
+| Smart Path Latency (warm)    | <2s average                            |
+| Smart Path Latency (cold)    | <5s                                    |
+| Overall Average Latency      | <500ms (weighted by path distribution) |
+| Command Coverage (fast path) | 80%+ by frequency                      |
+| Hook Failure Rate            | <0.1%                                  |
+| LLM Hallucination Rate       | <1%                                    |
+| Validation Pass Rate         | 97%+                                   |
+
+### Path Distribution (Target)
+
+| Path        | % of Commands |
+| ----------- | ------------- |
+| Fast Path   | 60%           |
+| Smart Path  | 20%           |
+| Passthrough | 20%           |
+
+### User Experience Metrics
+
+| Metric            | Target                                                  |
+| ----------------- | ------------------------------------------------------- |
+| Installation Time | <5 minutes (plugin), <10 minutes (manual + Ollama)      |
+| Configuration     | Zero-config works well out of the box                   |
+| Learning Curve    | <30 minutes to understand                               |
+| Debugging         | `terse health` + `terse test` provide clear diagnostics |
+
+---
+
+## Technology Stack
+
+### Cargo.toml Dependencies
+
+> **Note:** This is the _final_ `Cargo.toml` after all phases. Dependencies are added incrementally as each phase requires them. Phase 1 starts with only `serde`, `serde_json`, `clap`, `chrono`, `dirs`, and `anyhow`. Each phase's deliverables note which new dependencies to add.
+
+```toml
+[package]
+name = "terse"
+version = "0.1.0"
+edition = "2021"
+authors = ["Benjamin Welker"]
+description = "Token Efficiency through Refined Stream Engineering"
+license = "MIT"
+repository = "https://github.com/bwelker/terse"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+regex = "1.10"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+shellexpand = "3.1"
+clap = { version = "4.5", features = ["derive"] }
+colored = "2.1"
+ureq = { version = "2.9", features = ["json"] }
+thiserror = "1.0"
+anyhow = "1.0"
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.8"
+
+[[bin]]
+name = "terse"
+path = "src/main.rs"
+```
+
+### Optional Dependencies (added as needed)
+
+- `rusqlite` — upgrade from JSONL to SQLite for analytics
+- `prettytable-rs` — terminal table formatting
+- `indicatif` — progress bars for long operations
+- `tokio` — async runtime (only if needed for advanced features)
+
+---
+
+## Key Architectural Decisions
+
+| Decision                                       | Rationale                                                                                                   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **Single Rust binary**                         | One artifact to distribute, Ollama HTTP API callable from Rust directly, no additional runtime dependencies |
+| **TOML config** (not JSON)                     | Human-friendly, supports comments, standard in Rust ecosystem                                               |
+| **Git optimizer first** (not analytics-first)  | Delivers measurable value immediately; analytics added Phase 5 to guide subsequent priorities               |
+| **LLM as core feature**                        | Universal command coverage from Phase 3 onward — TERSE handles _any_ command                                |
+| **`ureq` sync HTTP** (not `reqwest` async)     | Simpler for beginner Rust, hook is inherently synchronous (stdin→stdout), no async runtime needed           |
+| **Circuit breaker per path** (not global)      | If LLM is down, fast path still works; if optimizer has bug, LLM fallback still works                       |
+| **Whitespace optimizer as post-processing**    | Applied after both fast and smart paths for consistent additional savings                                   |
+| **Hook-first, plugin later**                   | Faster iteration during development; plugin packaging after core is proven                                  |
+| **`anyhow` from Phase 1, `thiserror` Phase 9** | Start with simple error handling, refine to typed errors once the error landscape is understood             |
+
+---
+
+## Risk Management
+
+### Technical Risks
+
+| Risk                          | Mitigation                                                    | Fallback                                           |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| Hook breaks Claude Code       | Graceful passthrough on all errors; never fail silently       | Safe mode: `TERSE_SAFE_MODE=1`                     |
+| Optimized output confuses AI  | Test each optimizer manually; validate with real sessions     | Disable problematic optimizer via config           |
+| LLM latency too high          | Model warm-up, caching, timeout with fallback to raw          | `fast-only` mode bypasses LLM entirely             |
+| LLM hallucinates              | Strong prompts, output validation, length sanity check        | Validation failure → return raw output             |
+| Ollama not installed/running  | Health check detects; fast path + passthrough still work      | `fast-only` mode, clear `terse health` diagnostics |
+| Performance overhead too high | Profile early, optimize hot paths, <20ms target               | Circuit breaker disables slow paths                |
+| Cross-platform differences    | Abstraction layer, `#[cfg]` conditionals, CI on all platforms | Platform-specific tests in CI                      |
+
+### Project Risks
+
+| Risk                                 | Mitigation                                                       | Strategy                                                       |
+| ------------------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------- |
+| Rust learning curve                  | Phases introduce concepts incrementally; work with AI assistance | Learn by doing, one concept per phase                          |
+| Low adoption (complex install)       | Plugin system, install scripts, Ollama setup automation          | Excellent docs, `terse health` diagnostics                     |
+| Maintenance burden (many optimizers) | Modular design, good tests, `terse discover` guides priorities   | LLM smart path as catch-all reduces need for manual optimizers |
+
+---
+
+## Timeline Summary
+
+| Phase | Week  | Deliverable                                 | Key Rust Concepts                        |
+| ----- | ----- | ------------------------------------------- | ---------------------------------------- |
+| 1     | 1     | Hook passthrough + project setup            | Modules, serde, stdin/stdout, Result     |
+| 2     | 2–3   | Git optimizer with measurable savings       | Traits, enums, regex, match, tests       |
+| 3     | 3–4   | LLM smart path via Ollama HTTP              | HTTP client, timeouts, Option chaining   |
+| 4     | 4–5   | Router + decision engine + circuit breaker  | Enums as types, caching, builder pattern |
+| 5     | 5–6   | Analytics CLI + logging                     | HashMap, iterators, formatted output     |
+| 6     | 6–7   | Config system (TOML, hierarchy, profiles)   | TOML parsing, path handling, defaults    |
+| 7     | 7–8   | File, build, docker optimizers + whitespace | Code org at scale, DRY, trait objects    |
+| 8     | 8–9   | Prompt engineering + LLM quality            | String templating, structured output     |
+| 9     | 9–10  | Safety, error handling, reliability         | Custom errors, thiserror, anyhow         |
+| 10    | 10–11 | Cross-platform builds + CI/CD               | cfg attributes, GitHub Actions           |
+| 11    | 11–12 | Claude Code plugin packaging                | Distribution, manifests                  |
+| 12    | 12+   | Copilot CLI + advanced features             | Async, context detection                 |
+
+---
+
+## Verification Checklist
+
+At each phase, validate with:
+
+- **Unit tests:** `cargo test` — optimizer correctness, router decisions, config parsing
+- **Integration tests:** End-to-end hook flow with sample JSON input
+- **Manual testing:** Run real Claude Code sessions, observe behavior
+- **Token measurement:** Compare original vs optimized output sizes in logs
+- **`terse stats`:** (Phase 5+) Use analytics to verify savings percentages
+- **`terse health`:** Confirm Ollama connectivity, hook registration, config validity
+- **Cross-platform CI:** (Phase 10+) All tests pass on Windows/macOS/Linux
+
+**Overall success target:** 60–80% average token savings, <20ms fast path latency, <2s smart path latency, <0.1% failure rate, single binary install.
