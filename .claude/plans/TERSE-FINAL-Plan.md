@@ -47,28 +47,43 @@
 
 ### Dual-Path Execution Model
 
+> **Protocol note (critical):** Claude Code hooks use the `hookSpecificOutput` protocol.
+> A PreToolUse hook **cannot** block-and-substitute (i.e., run the command itself and return
+> the output). Instead, it can **rewrite** the command via `updatedInput`, and Claude Code
+> then executes the rewritten command. TERSE uses this to rewrite commands to
+> `terse run "original_command"`, so Claude Code executes `terse run` which does the
+> optimization internally and prints the optimized output to stdout.
+
 ```
 Claude Code wants to execute a Bash command
     ↓
 PreToolUse Hook → terse hook (reads JSON from stdin)
     ↓
-Step 1 — Safety Classifier (pre-execution):
-  Command is destructive (rm, mv, >, >>)? → Passthrough immediately
-  Command is an editor (code, vim, nano)?  → Passthrough immediately
-    ↓
-Step 2 — Execute the command:
-  Run via std::process::Command, capture stdout + stderr
-    ↓
-Step 3 — Router Decision (post-execution, based on actual output):
-  Output < 100 chars?                      → Passthrough (not worth optimizing)
-  Rule-based optimizer available?           → Fast Path (Rust, <20ms)
-  Ollama available AND output > 200 chars?  → Smart Path (LLM, <2s)
+Step 1 — Match Check (pre-execution, no command execution here):
+  Command already a terse invocation?       → Passthrough (avoid infinite loop)
+  Command is destructive (rm, mv, >, >>)?   → Passthrough immediately
+  Command is an editor (code, vim, nano)?   → Passthrough immediately
+  Rule-based optimizer available?           → Rewrite to terse run
+  Ollama available (Phase 3+)?              → Rewrite to terse run
   None of the above?                        → Passthrough
     ↓
-Step 4 — Post-Processing:
-  Whitespace cleanup (applied to all optimized output)
+Return JSON to stdout:
+  Passthrough → empty `{}`
+  Rewrite → `{ "hookSpecificOutput": { "updatedInput": { "command": "terse run ..." } } }`
     ↓
-Return JSON to stdout → Claude Code receives optimized result
+Claude Code executes the (possibly rewritten) command
+    ↓ (if rewritten to terse run)
+terse run "original_command":
+  Step 2 — Execute the command via optimizer
+  Step 3 — Router Decision (based on actual output):
+    Output < 100 chars?                      → Passthrough (not worth optimizing)
+    Rule-based optimizer available?           → Fast Path (Rust, <20ms)
+    Ollama available AND output > 200 chars?  → Smart Path (LLM, <2s)
+    None of the above?                        → Run raw and pass through
+  Step 4 — Post-Processing:
+    Whitespace cleanup (applied to all optimized output)
+    ↓
+  Print optimized output to stdout → Claude Code receives the result
 ```
 
 > **Note on optimization strategies:** Fast-path optimizers may use two techniques:
@@ -187,9 +202,15 @@ terse/
 - [ ] Implement `src/main.rs` — detect mode (hook vs CLI) based on subcommand: `terse hook` vs `terse stats`
 - [ ] Implement `src/hook/protocol.rs` — define the Claude Code hook JSON schema:
   - Input: `{ "tool_name": "Bash", "tool_input": { "command": "git status" } }`
-  - Output: `{ "decision": "block", "stdout": "...", "stderr": "" }` OR empty JSON `{}` for passthrough
-  - **Important:** Verify these structures against the current Claude Code hook documentation before implementing. The schemas above are based on publicly available information and may need adjustment.
-- [ ] Implement `src/hook/mod.rs` — read JSON from stdin, parse command, execute it via `std::process::Command`, return raw output unchanged
+  - Passthrough output: empty JSON `{}` — Claude Code proceeds unchanged
+  - Rewrite output: `{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow", "permissionDecisionReason": "terse command rewrite", "updatedInput": { "command": "terse run \"git status\"" } } }` — Claude Code executes the rewritten command
+  - **Key protocol constraints:**
+    - Hooks **cannot** return command output directly — they can only allow, deny, or rewrite
+    - `updatedInput` modifies the tool input before execution
+    - Exit code 0 + JSON = structured control; exit code 2 = deny; empty output = passthrough
+- [ ] Implement `src/hook/mod.rs` — read JSON from stdin, check if optimizer matches, return rewrite or passthrough
+- [ ] Implement `src/run/mod.rs` — executor for `terse run "command"`: runs optimizer, logs analytics, prints result to stdout
+- [ ] Implement `src/main.rs` — CLI with subcommands: `terse hook` (PreToolUse handler), `terse run <command>` (optimizer executor), `terse stats` (analytics)
 - [ ] Register hook manually in `~/.claude/settings.json`:
   ```json
   {
@@ -232,9 +253,9 @@ terse/
 
 - [ ] Define the `Optimizer` trait in `src/optimizers/mod.rs`:
   - `fn can_handle(&self, command: &str) -> bool`
-  - `fn optimize(&self, command: &str, raw_output: &str) -> Result<OptimizedOutput>`
-  - `OptimizedOutput` struct: `{ output: String, original_tokens: usize, optimized_tokens: usize }`
-- [ ] Create optimizer registry — a `Vec<Box<dyn Optimizer>>` that tries each in order
+  - `fn execute_and_optimize(&self, command: &str) -> Result<OptimizedOutput>` — optimizer runs the command (or a substitute) and returns optimized output
+  - `OptimizedOutput` struct: `{ output: String, original_tokens: usize, optimized_tokens: usize, optimizer_used: String }`
+- [ ] Create optimizer registry — a `Vec<Box<dyn Optimizer>>` that tries each in order via `execute_first()`
 - [ ] Implement `src/optimizers/git.rs` with these sub-optimizers:
   - `git status` → **command substitution**: run `git status --short --branch` instead, return compact output
   - `git log` → **command substitution**: run `git log --oneline -n 20` instead, return compact format
@@ -243,7 +264,7 @@ terse/
   - `git branch` → **output post-processing**: compact list, highlight current branch
 - [ ] Implement `src/utils/token_counter.rs` — heuristic: `chars / 4` for token estimation
 - [ ] Implement `src/utils/process.rs` — cross-platform command execution wrapper
-- [ ] Wire optimizers into hook flow: execute command → check optimizer match → return optimized or raw output
+- [ ] Wire optimizers into hook flow: hook checks optimizer match → rewrites to `terse run` via `updatedInput` → `terse run` executes optimizer → prints optimized output
 - [ ] Add basic logging to `~/.terse/command-log.jsonl`:
   - Timestamp, command, original tokens, optimized tokens, savings %, optimizer used
 - [ ] Write unit tests: test each git optimizer against sample outputs, verify token reduction
@@ -255,6 +276,57 @@ terse/
 - Claude Code still understands the optimized output
 - Token savings logged to JSONL file
 - All unit tests pass
+
+---
+
+### Phase 2-1: Command Matching Engine (Week 2–3, alongside Phase 2)
+
+**Goal:** Robust extraction and matching of tool-use commands from Claude's shell invocations, handling prefixed, chained, and wrapped commands that simple equality checks would miss.
+
+**Problem Statement:** Claude Code often wraps commands with `cd`, `&&` chains, environment variable prefixes, or subshell invocations. For example:
+
+- `cd /home/user/project && git status`
+- `LANG=C git diff`
+- `(cd /repo && git log --oneline)`
+- `bash -c "git status"`
+
+A naive `command.starts_with("git")` check misses all of these. The existing `normalized_git_command()` in `git.rs` handles the `cd ... &&` pattern, but a unified, extensible matching engine is needed as more optimizers are added.
+
+**Reference:** [RTK-AI's rtk-rewrite.sh](https://github.com/rtk-ai/rtk/blob/master/hooks/rtk-rewrite.sh) solves this in a 200+ line shell script using `jq`, `grep -qE`, and `sed` chains with many elif branches. TERSE handles this directly in Rust for better performance, type safety, single-binary distribution, and no dependency on external tools.
+
+**Rust concepts introduced:** String processing, iterators, `Option` chaining, regex (optional).
+
+**Deliverables:**
+
+- [ ] Implement `src/matching/mod.rs` — command extraction and normalization engine:
+  - `extract_core_command(raw: &str) -> &str` — strip common wrappers:
+    - `cd <path> &&` prefix → extract everything after `&&`
+    - `ENV=val` prefixes → strip environment variable assignments
+    - `bash -c "..."` / `sh -c "..."` → extract inner command
+    - Subshell wrappers `(...)` → unwrap
+    - Pipeline chains: match only the first command in `cmd1 | cmd2`
+  - `matches_command(raw: &str, target: &str) -> bool` — check if the extracted command starts with `target`
+  - Returns the normalized command for the optimizer to use
+- [ ] Refactor `normalized_git_command()` in `git.rs` to use the shared extraction engine
+- [ ] Update `OptimizerRegistry::can_handle()` to use the matching engine
+- [ ] Add the `terse run` infinite-loop guard to the matching engine (skip commands containing `terse` + `run`)
+- [ ] Write comprehensive unit tests for edge cases:
+  - Simple: `git status` → matches `git`
+  - Prefixed: `cd /repo && git status` → matches `git`
+  - Env vars: `PAGER=cat git log` → matches `git`
+  - Subshell: `(cd /repo && git diff)` → matches `git`
+  - Shell wrapper: `bash -c "git status"` → matches `git`
+  - Pipeline: `git log | head -20` → matches `git`
+  - Non-match: `echo "git status"` → does NOT match `git`
+  - Already terse: `terse run "git status"` → does NOT match (loop guard)
+
+**Success Criteria:**
+
+- All Phase 2 git optimizers work with prefixed/chained commands
+- No false positives on quoted strings (e.g., `echo "git status"` is NOT a git command)
+- Extraction handles real-world Claude Code patterns observed in analytics
+- Matching adds <1ms overhead
+- Easily extensible for new optimizers (file, build, docker) in later phases
 
 ---
 

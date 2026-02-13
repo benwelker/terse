@@ -6,9 +6,17 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 
 use crate::hook::protocol::{HookRequest, HookResponse};
+use crate::optimizers::OptimizerRegistry;
 
 pub mod protocol;
 
+/// Entry point for `terse hook` — the PreToolUse handler.
+///
+/// Reads the Claude Code hook JSON from stdin, decides whether the command
+/// can be optimized, and writes a JSON response to stdout:
+/// - Passthrough (`{}`) for unrecognized or non-Bash commands.
+/// - Rewrite (`hookSpecificOutput.updatedInput`) to route the command
+///   through `terse run`, which executes and optimizes it.
 pub fn run() -> Result<()> {
     log_hook_event("hook invoked");
 
@@ -30,8 +38,6 @@ pub fn run() -> Result<()> {
         .write_all(json.as_bytes())
         .context("failed writing hook response to stdout")?;
 
-    log_hook_event("hook response=passthrough");
-
     Ok(())
 }
 
@@ -40,17 +46,52 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
         return Ok(HookResponse::passthrough());
     }
 
-    let request: HookRequest =
-        serde_json::from_str(raw).context("invalid hook request JSON")?;
+    let request: HookRequest = serde_json::from_str(raw).context("invalid hook request JSON")?;
 
     let is_bash = request.is_bash();
-    let command = summarize_command(request.tool_input.command.as_deref());
+    let command_preview = summarize_command(request.tool_input.command.as_deref());
     log_hook_event(&format!(
         "request tool={} is_bash={} command=\"{}\"",
-        request.tool_name, is_bash, command
+        request.tool_name, is_bash, command_preview
     ));
 
+    if !is_bash {
+        return Ok(HookResponse::passthrough());
+    }
+
+    let Some(command) = request.tool_input.command.as_deref() else {
+        return Ok(HookResponse::passthrough());
+    };
+
+    // Prevent infinite loop: if the command is already a terse invocation, pass through.
+    if command.contains("terse") && command.contains("run") {
+        log_hook_event("command is already a terse invocation; passthrough");
+        return Ok(HookResponse::passthrough());
+    }
+
+    let registry = OptimizerRegistry::new();
+    if registry.can_handle(command) {
+        let rewritten = build_rewrite_command(command)?;
+        log_hook_event(&format!("optimizer matched; rewriting to: {rewritten}"));
+        return Ok(HookResponse::rewrite(&rewritten));
+    }
+
+    log_hook_event("no optimizer matched; passthrough");
     Ok(HookResponse::passthrough())
+}
+
+/// Build the rewritten command that routes execution through `terse run`.
+///
+/// Uses `std::env::current_exe()` to locate the running binary so the
+/// rewrite works from both development builds and installed locations.
+fn build_rewrite_command(original_command: &str) -> Result<String> {
+    let exe = std::env::current_exe().context("failed to determine terse executable path")?;
+    let exe_str = exe.display().to_string();
+
+    // Escape any double quotes in the original command
+    let escaped = original_command.replace('"', "\\\"");
+
+    Ok(format!("\"{exe_str}\" run \"{escaped}\""))
 }
 
 fn summarize_command(command: Option<&str>) -> String {
