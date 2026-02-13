@@ -467,12 +467,28 @@ fn compact_git_branches(raw_output: &str) -> String {
         }
     }
 
+    let max_local: usize = 20;
+    let max_remote: usize = 10;
+
     let mut result = Vec::new();
+
+    // Summary line: total counts at a glance.
+    let total = 1_usize.max(local.len() + if current.is_empty() { 0 } else { 1 });
+    let remote_count = remote.len();
+    if remote_count > 0 {
+        result.push(format!("branches: {total} local, {remote_count} remote"));
+    } else {
+        result.push(format!("branches: {total} local"));
+    }
+
     if !current.is_empty() {
         result.push(format!("* {current}"));
     }
-    for branch in &local {
+    for branch in local.iter().take(max_local) {
         result.push(format!("  {branch}"));
+    }
+    if local.len() > max_local {
+        result.push(format!("  +{} more", local.len() - max_local));
     }
 
     if !remote.is_empty() {
@@ -482,11 +498,11 @@ fn compact_git_branches(raw_output: &str) -> String {
             .collect();
         if !remote_only.is_empty() {
             result.push(format!("  remote-only ({}):", remote_only.len()));
-            for b in remote_only.iter().take(10) {
+            for b in remote_only.iter().take(max_remote) {
                 result.push(format!("    {b}"));
             }
-            if remote_only.len() > 10 {
-                result.push(format!("    +{} more", remote_only.len() - 10));
+            if remote_only.len() > max_remote {
+                result.push(format!("    +{} more", remote_only.len() - max_remote));
             }
         }
     }
@@ -922,7 +938,8 @@ diff --git a/b.rs b/b.rs
     fn compacts_local_branches() {
         let raw = "  main\n* feature/new-api\n  release\n";
         let compact = compact_git_branches(raw);
-        assert!(compact.starts_with("* feature/new-api"));
+        assert!(compact.contains("branches: 3 local"));
+        assert!(compact.contains("* feature/new-api"));
         assert!(compact.contains("main"));
         assert!(compact.contains("release"));
     }
@@ -938,12 +955,28 @@ diff --git a/b.rs b/b.rs
   remotes/origin/release/v2
 ";
         let compact = compact_git_branches(raw);
+        assert!(compact.contains("branches: 2 local, 3 remote"));
         assert!(compact.contains("* main"));
         assert!(compact.contains("feature/auth"));
         assert!(compact.contains("remote-only (1):"));
         assert!(compact.contains("release/v2"));
         // main and feature/auth are local — should NOT appear in remote-only
         assert!(!compact.contains("    main"));
+    }
+
+    #[test]
+    fn truncates_many_local_branches() {
+        let mut raw = String::from("* current\n");
+        for i in 0..40 {
+            raw.push_str(&format!("  branch-{i:03}\n"));
+        }
+        let compact = compact_git_branches(&raw);
+        assert!(compact.contains("branches: 41 local"));
+        assert!(compact.contains("* current"));
+        // Only first 20 non-current branches shown
+        assert!(compact.contains("branch-019"));
+        assert!(!compact.contains("branch-020"));
+        assert!(compact.contains("+20 more"));
     }
 
     // compact_git_show --------------------------------------------------

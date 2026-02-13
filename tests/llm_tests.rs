@@ -47,10 +47,10 @@ unsafe fn remove_env(key: &str) {
 
 #[test]
 fn smart_path_feature_flag_env_vars() {
-    // --- disabled by default ---
-    unsafe { remove_env("TERSE_SMART_PATH") };
+    // --- disabled via env (overrides any config file) ---
+    unsafe { set_env("TERSE_SMART_PATH", "0") };
     let config = SmartPathConfig::load();
-    assert!(!config.enabled, "smart path should be disabled by default");
+    assert!(!config.enabled, "TERSE_SMART_PATH=0 should disable (overrides config file)");
 
     // --- "1" enables ---
     unsafe { set_env("TERSE_SMART_PATH", "1") };
