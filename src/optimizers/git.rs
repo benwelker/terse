@@ -18,20 +18,27 @@ impl Optimizer for GitOptimizer {
     }
 
     fn can_handle(&self, command: &str) -> bool {
-        let Some(normalized) = normalized_git_command(command) else {
-            return false;
-        };
+        let core = crate::matching::extract_core_command(command);
+        let lower = core.to_ascii_lowercase();
 
-        normalized.starts_with("git status")
-            || normalized.starts_with("git log")
-            || normalized.starts_with("git diff")
-            || normalized.starts_with("git branch")
-            || is_short_status_command(&normalized)
+        if !lower.starts_with("git ") {
+            return false;
+        }
+
+        lower.starts_with("git status")
+            || lower.starts_with("git log")
+            || lower.starts_with("git diff")
+            || lower.starts_with("git branch")
+            || is_short_status_command(&lower)
     }
 
     fn execute_and_optimize(&self, command: &str) -> Result<OptimizedOutput> {
-        let normalized =
-            normalized_git_command(command).ok_or_else(|| anyhow!("not a git command"))?;
+        let core = crate::matching::extract_core_command(command);
+        let normalized = core.to_ascii_lowercase();
+
+        if !normalized.starts_with("git ") {
+            return Err(anyhow!("not a git command"));
+        }
 
         // Run the original command to capture raw output for token counting.
         // Even for command substitution optimizers, we need the original output
@@ -84,25 +91,6 @@ fn combine_output(stdout: &str, stderr: &str) -> String {
         (false, true) => stdout.to_string(),
         (true, false) => stderr.to_string(),
         (false, false) => format!("{stdout}\n{stderr}"),
-    }
-}
-
-fn normalized_git_command(command: &str) -> Option<String> {
-    let mut normalized = command.trim();
-
-    if let Some((_, tail)) = normalized.rsplit_once("&&") {
-        normalized = tail.trim();
-    }
-
-    if let Some((_, tail)) = normalized.rsplit_once(';') {
-        normalized = tail.trim();
-    }
-
-    let lower = normalized.to_ascii_lowercase();
-    if lower.starts_with("git ") {
-        Some(lower)
-    } else {
-        None
     }
 }
 

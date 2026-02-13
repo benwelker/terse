@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 
 use crate::hook::protocol::{HookRequest, HookResponse};
+use crate::matching;
 use crate::optimizers::OptimizerRegistry;
 
 pub mod protocol;
@@ -64,8 +65,14 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
     };
 
     // Prevent infinite loop: if the command is already a terse invocation, pass through.
-    if command.contains("terse") && command.contains("run") {
+    if matching::is_terse_invocation(command) {
         log_hook_event("command is already a terse invocation; passthrough");
+        return Ok(HookResponse::passthrough());
+    }
+
+    // Heredocs embed multi-line content inline — never rewrite these.
+    if matching::contains_heredoc(command) {
+        log_hook_event("command contains heredoc; passthrough");
         return Ok(HookResponse::passthrough());
     }
 
