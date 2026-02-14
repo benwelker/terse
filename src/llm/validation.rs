@@ -84,9 +84,7 @@ fn check_no_hallucination_markers(llm_output: &str) -> Result<()> {
     let lower = llm_output.to_ascii_lowercase();
     for marker in &refusal_markers {
         if lower.contains(&marker.to_ascii_lowercase()) {
-            return Err(anyhow!(
-                "LLM output contains refusal marker: \"{marker}\""
-            ));
+            return Err(anyhow!("LLM output contains refusal marker: \"{marker}\""));
         }
     }
 
@@ -102,8 +100,8 @@ fn check_no_hallucination_markers(llm_output: &str) -> Result<()> {
         "you can use",
         "you can run",
         "to achieve this",
-        "--rules=",           // fabricated flag
-        "--remove-verbose",   // fabricated flag
+        "--rules=",         // fabricated flag
+        "--remove-verbose", // fabricated flag
     ];
 
     for marker in &fabrication_markers {
@@ -272,9 +270,7 @@ pub fn strip_preamble(text: &str) -> String {
             lines.remove(0);
             continue;
         }
-        let is_preamble = PREAMBLE_PREFIXES
-            .iter()
-            .any(|p| first_lower.starts_with(p));
+        let is_preamble = PREAMBLE_PREFIXES.iter().any(|p| first_lower.starts_with(p));
         if is_preamble {
             lines.remove(0);
             // Also skip a blank line immediately after the preamble
@@ -382,7 +378,8 @@ mod tests {
     fn example_echo_check_is_noop_without_examples() {
         // Few-shot examples have been removed, so example_after_for returns ""
         // and the echo check is a harmless no-op.
-        let raw = "On branch feature\nYour branch is up to date with origin/feature.\nnothing to commit";
+        let raw =
+            "On branch feature\nYour branch is up to date with origin/feature.\nnothing to commit";
         let llm = "branch: feature (up to date)";
         assert!(validate_llm_output("git status", raw, llm).is_ok());
     }

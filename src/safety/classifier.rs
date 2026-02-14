@@ -28,7 +28,40 @@ pub enum CommandClass {
 /// removes them. Additional commands can be added via `passthrough.commands`
 /// in config.toml.
 const BUILTIN_PASSTHROUGH_COMMANDS: &[&str] = &[
-    "rm", "rmdir", "del", "mv", "move", "code", "vim", "vi", "nano", "emacs", "subl", "notepad",
+    // Unix destructive commands
+    "rm",
+    "rmdir",
+    "mv",
+    // Windows cmd destructive commands
+    "del",
+    "erase",
+    "rd",
+    "ren",
+    "move",
+    "copy",
+    "xcopy",
+    "robocopy",
+    // PowerShell destructive cmdlets
+    "remove-item",
+    "move-item",
+    "rename-item",
+    // PowerShell aliases for destructive ops
+    "ri",
+    "mi",
+    // PowerShell file-writing cmdlets (act like redirects)
+    "set-content",
+    "out-file",
+    "add-content",
+    // Editors (Unix)
+    "vim",
+    "vi",
+    "nano",
+    "emacs",
+    // Editors (cross-platform / Windows)
+    "code",
+    "subl",
+    "notepad",
+    "notepad++",
 ];
 
 /// Classify a command for routing purposes.
@@ -193,5 +226,60 @@ mod tests {
         // <<EOF is a heredoc, not an output redirect.
         // (Heredocs are handled separately by the matching engine.)
         assert!(!has_file_redirect("cat <<EOF\nhello\nEOF"));
+    }
+
+    // --- Windows-specific commands (Phase 10) ---
+
+    #[test]
+    fn windows_destructive_commands_are_never_optimized() {
+        assert_eq!(classify("del file.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("erase file.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("rd /s /q mydir"), CommandClass::NeverOptimize);
+        assert_eq!(classify("ren old.txt new.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("move a.txt b.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("copy a.txt b.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("xcopy src dst /e"), CommandClass::NeverOptimize);
+        assert_eq!(
+            classify("robocopy src dst /mir"),
+            CommandClass::NeverOptimize
+        );
+    }
+
+    #[test]
+    fn powershell_destructive_cmdlets_are_never_optimized() {
+        assert_eq!(
+            classify("Remove-Item -Recurse -Force node_modules"),
+            CommandClass::NeverOptimize
+        );
+        assert_eq!(
+            classify("Move-Item old.txt new.txt"),
+            CommandClass::NeverOptimize
+        );
+        assert_eq!(
+            classify("Rename-Item old.txt new.txt"),
+            CommandClass::NeverOptimize
+        );
+    }
+
+    #[test]
+    fn powershell_file_writing_cmdlets_are_never_optimized() {
+        assert_eq!(
+            classify("Set-Content -Path file.txt -Value hello"),
+            CommandClass::NeverOptimize
+        );
+        assert_eq!(
+            classify("Out-File -FilePath log.txt"),
+            CommandClass::NeverOptimize
+        );
+        assert_eq!(
+            classify("Add-Content -Path log.txt -Value data"),
+            CommandClass::NeverOptimize
+        );
+    }
+
+    #[test]
+    fn powershell_aliases_are_never_optimized() {
+        assert_eq!(classify("ri -Force file.txt"), CommandClass::NeverOptimize);
+        assert_eq!(classify("mi old.txt new.txt"), CommandClass::NeverOptimize);
     }
 }

@@ -99,10 +99,7 @@ pub fn optimize_with_llm(command: &str, raw_output: &str) -> Result<LlmResult> {
     let category = prompts::classify_command(command);
 
     let (system_msg, user_msg) = build_chat_messages(command, raw_output);
-    let messages = vec![
-        ChatMessage::system(system_msg),
-        ChatMessage::user(user_msg),
-    ];
+    let messages = vec![ChatMessage::system(system_msg), ChatMessage::user(user_msg)];
 
     let start = Instant::now();
     let llm_output = client.chat(&messages)?;

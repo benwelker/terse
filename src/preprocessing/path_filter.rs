@@ -74,9 +74,7 @@ fn is_noise_path_line(line: &str) -> bool {
             .iter()
             .any(|seg| normalized.contains(seg))
     } else {
-        NOISE_DIR_SEGMENTS
-            .iter()
-            .any(|seg| trimmed.contains(seg))
+        NOISE_DIR_SEGMENTS.iter().any(|seg| trimmed.contains(seg))
     }
 }
 

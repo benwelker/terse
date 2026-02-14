@@ -229,9 +229,7 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         match llm::optimize_with_llm(command, &preprocessed.text) {
             Ok(llm_result) => {
                 cb.record_success(PathId::SmartPath);
-                let output = append_truncation_footer(
-                    &llm_result.output, raw_bytes,
-                );
+                let output = append_truncation_footer(&llm_result.output, raw_bytes);
                 return Ok(ExecutionResult {
                     original_tokens: raw_tokens,
                     optimized_tokens: llm_result.optimized_tokens,
@@ -271,9 +269,7 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         match registry.optimize_first(command, &preprocessed.text) {
             Some(result) => {
                 cb.record_success(PathId::FastPath);
-                let output = append_truncation_footer(
-                    &result.output, raw_bytes,
-                );
+                let output = append_truncation_footer(&result.output, raw_bytes);
                 return Ok(ExecutionResult {
                     original_tokens: raw_tokens,
                     optimized_tokens: result.optimized_tokens,

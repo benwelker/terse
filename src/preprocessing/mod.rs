@@ -243,7 +243,7 @@ mod tests {
         // Should be significantly smaller
         assert!(
             result.reduction_pct > 30.0,
-            "Expected >30% reduction, got {:.1}%",
+            "Expected >30% reduction, got {:.2}%",
             result.reduction_pct
         );
         // Must preserve the final summary

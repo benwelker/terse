@@ -260,16 +260,9 @@ fn llm_live_generate_and_validate() {
         "git status",
         "On branch main\nYour branch is up to date with 'origin/main'.\n\nnothing to commit, working tree clean\n",
     );
-    let messages = vec![
-        ChatMessage::system(system),
-        ChatMessage::user(user),
-    ];
+    let messages = vec![ChatMessage::system(system), ChatMessage::user(user)];
     let result = client.chat(&messages);
-    assert!(
-        result.is_ok(),
-        "chat should succeed: {:?}",
-        result.err()
-    );
+    assert!(result.is_ok(), "chat should succeed: {:?}", result.err());
 
     let output = result.unwrap();
     assert!(!output.trim().is_empty(), "LLM output should be non-empty");

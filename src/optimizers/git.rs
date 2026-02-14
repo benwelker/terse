@@ -168,21 +168,31 @@ impl Optimizer for GitOptimizer {
         let optimized = match subcommand {
             GitSubcommand::Status => optimize_status(ctx)?,
             GitSubcommand::Log => optimize_log(
-                ctx, &lower, raw_output,
-                self.log_max_entries, self.log_default_limit, self.log_line_max_chars,
+                ctx,
+                &lower,
+                raw_output,
+                self.log_max_entries,
+                self.log_default_limit,
+                self.log_line_max_chars,
             )?,
             GitSubcommand::Diff => compact_diff_with_stat(
-                raw_output, self.diff_max_hunk_lines, self.diff_max_total_lines,
+                raw_output,
+                self.diff_max_hunk_lines,
+                self.diff_max_total_lines,
             ),
-            GitSubcommand::Branch => compact_git_branches(
-                raw_output, self.branch_max_local, self.branch_max_remote,
-            ),
+            GitSubcommand::Branch => {
+                compact_git_branches(raw_output, self.branch_max_local, self.branch_max_remote)
+            }
             GitSubcommand::Show => compact_git_show(
-                raw_output, self.diff_max_hunk_lines, self.diff_max_total_lines,
+                raw_output,
+                self.diff_max_hunk_lines,
+                self.diff_max_total_lines,
             ),
             GitSubcommand::Stash => optimize_stash(
-                &lower, raw_output,
-                self.diff_max_hunk_lines, self.diff_max_total_lines,
+                &lower,
+                raw_output,
+                self.diff_max_hunk_lines,
+                self.diff_max_total_lines,
             ),
             GitSubcommand::Worktree => compact_worktree_list(raw_output),
             GitSubcommand::ShortStatus => summarize_git_operation(&lower, raw_output),
@@ -323,7 +333,11 @@ fn optimize_log(
 
     if has_format && has_limit {
         // User already specified both — just filter the raw output for length.
-        return Ok(filter_log_output(raw_text, log_max_entries, log_line_max_chars));
+        return Ok(filter_log_output(
+            raw_text,
+            log_max_entries,
+            log_line_max_chars,
+        ));
     }
 
     // Build substitution target with only the missing defaults.
@@ -435,11 +449,7 @@ fn generate_diff_stat(diff_text: &str) -> String {
 }
 
 /// Compact diff hunks with per-hunk line limits.
-fn compact_diff_hunks(
-    diff_text: &str,
-    max_hunk_lines: usize,
-    max_total_lines: usize,
-) -> String {
+fn compact_diff_hunks(diff_text: &str, max_hunk_lines: usize, max_total_lines: usize) -> String {
     let mut kept = Vec::new();
     let mut hunk_lines = 0usize;
 
@@ -475,11 +485,7 @@ fn compact_diff_hunks(
 // Branch — compact list with remote dedup
 // ---------------------------------------------------------------------------
 
-fn compact_git_branches(
-    raw_output: &str,
-    max_local: usize,
-    max_remote: usize,
-) -> String {
+fn compact_git_branches(raw_output: &str, max_local: usize, max_remote: usize) -> String {
     let mut current = String::new();
     let mut local: Vec<String> = Vec::new();
     let mut remote: Vec<String> = Vec::new();
@@ -546,11 +552,7 @@ fn compact_git_branches(
 // Show — commit summary + stat + compact diff
 // ---------------------------------------------------------------------------
 
-fn compact_git_show(
-    raw_output: &str,
-    max_hunk_lines: usize,
-    max_total_lines: usize,
-) -> String {
+fn compact_git_show(raw_output: &str, max_hunk_lines: usize, max_total_lines: usize) -> String {
     // Split at first "diff --git" to separate metadata from diff.
     let (metadata, diff_part) = match raw_output.find("diff --git") {
         Some(pos) => (&raw_output[..pos], &raw_output[pos..]),

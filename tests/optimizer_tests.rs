@@ -250,7 +250,10 @@ fn file_optimizer_skips_compact_ls() {
 #[test]
 fn file_optimizer_handles_find_cat_wc_tree() {
     let opt = FileOptimizer::new();
-    assert!(opt.can_handle(&CommandContext::new("find . -name '*.rs'")));
+    // `find` is only optimized on Unix (on Windows it's a text-search tool)
+    if cfg!(not(target_os = "windows")) {
+        assert!(opt.can_handle(&CommandContext::new("find . -name '*.rs'")));
+    }
     assert!(opt.can_handle(&CommandContext::new("cat README.md")));
     assert!(opt.can_handle(&CommandContext::new("head -n 20 file.txt")));
     assert!(opt.can_handle(&CommandContext::new("tail -100 app.log")));
@@ -279,6 +282,10 @@ fn file_optimizer_ls_compacts_long_output() {
 
 #[test]
 fn file_optimizer_find_compacts_many_results() {
+    // `find` optimization only available on non-Windows
+    if cfg!(target_os = "windows") {
+        return;
+    }
     let opt = FileOptimizer::new();
     let ctx = CommandContext::new("find . -name '*.rs'");
     let lines: Vec<String> = (0..80).map(|i| format!("./src/file{i}.rs")).collect();
@@ -295,7 +302,7 @@ fn file_optimizer_cat_truncates_long_file() {
     let input = lines.join("\n");
     let result = opt.optimize_output(&ctx, &input).unwrap();
     assert!(result.output.contains("lines omitted"));
-    assert!(result.output.contains("line 0"));   // head
+    assert!(result.output.contains("line 0")); // head
     assert!(result.output.contains("line 199")); // tail
 }
 
@@ -429,9 +436,7 @@ fn docker_optimizer_handles_commands() {
 #[test]
 fn docker_optimizer_skips_custom_format() {
     let opt = DockerOptimizer::new();
-    assert!(!opt.can_handle(&CommandContext::new(
-        "docker ps --format '{{.Names}}'"
-    )));
+    assert!(!opt.can_handle(&CommandContext::new("docker ps --format '{{.Names}}'")));
     assert!(!opt.can_handle(&CommandContext::new(
         "docker images --format '{{.Repository}}'"
     )));

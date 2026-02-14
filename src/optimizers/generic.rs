@@ -188,7 +188,11 @@ mod tests {
         let result = cleanup_whitespace(&input, 100);
         let result_lines: Vec<&str> = result.lines().collect();
         // Should be around 100 lines (head + gap + tail)
-        assert!(result_lines.len() <= 102, "got {} lines", result_lines.len());
+        assert!(
+            result_lines.len() <= 102,
+            "got {} lines",
+            result_lines.len()
+        );
         assert!(result.contains("lines omitted"));
         assert!(result.contains("line 0")); // head preserved
         assert!(result.contains("line 299")); // tail preserved

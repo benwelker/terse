@@ -28,7 +28,15 @@ fn classify(lower: &str) -> Option<FileCommand> {
     let first = lower.split_whitespace().next()?;
     match first {
         "ls" | "dir" | "gci" | "get-childitem" => Some(FileCommand::Ls),
-        "find" => Some(FileCommand::Find),
+        "find" => {
+            // On Windows, `find` is a text-search tool, not a file-finder.
+            // Only match on Unix-like platforms.
+            if cfg!(target_os = "windows") {
+                None
+            } else {
+                Some(FileCommand::Find)
+            }
+        }
         "cat" | "head" | "tail" | "type" | "get-content" | "gc" => Some(FileCommand::CatHeadTail),
         "wc" => Some(FileCommand::Wc),
         "tree" => Some(FileCommand::Tree),
@@ -44,8 +52,8 @@ fn classify(lower: &str) -> Option<FileCommand> {
 fn has_compact_flag(lower: &str, cmd: FileCommand) -> bool {
     match cmd {
         FileCommand::Ls => {
-            // Skip if user already has a custom format or single-column flag
-            has_any_flag(lower, &["-1", "--format", "-C", "-m", "-x"])
+            // Unix ls compact flags + PowerShell `-Name` flag
+            has_any_flag(lower, &["-1", "--format", "-C", "-m", "-x", "-name"])
         }
         _ => false,
     }
@@ -53,8 +61,7 @@ fn has_compact_flag(lower: &str, cmd: FileCommand) -> bool {
 
 /// Check if any whitespace-delimited token matches a flag exactly.
 fn has_any_flag(text: &str, flags: &[&str]) -> bool {
-    text.split_whitespace()
-        .any(|word| flags.contains(&word))
+    text.split_whitespace().any(|word| flags.contains(&word))
 }
 
 // ---------------------------------------------------------------------------
@@ -124,9 +131,16 @@ impl Optimizer for FileOptimizer {
         let optimized = match cmd {
             FileCommand::Ls => compact_ls(raw_output, self.ls_max_entries, self.ls_max_items),
             FileCommand::Find => compact_find(raw_output, self.find_max_results),
-            FileCommand::CatHeadTail => compact_cat(raw_output, self.cat_max_lines, self.cat_head_lines, self.cat_tail_lines),
+            FileCommand::CatHeadTail => compact_cat(
+                raw_output,
+                self.cat_max_lines,
+                self.cat_head_lines,
+                self.cat_tail_lines,
+            ),
             FileCommand::Wc => compact_wc(raw_output, self.wc_max_lines),
-            FileCommand::Tree => compact_tree(raw_output, self.tree_max_lines, &self.tree_noise_dirs),
+            FileCommand::Tree => {
+                compact_tree(raw_output, self.tree_max_lines, &self.tree_noise_dirs)
+            }
         };
 
         Ok(OptimizedOutput {
@@ -340,7 +354,11 @@ fn compact_ls_long(lines: &[&str], max_entries: usize) -> String {
 
     let mut output = result.join("\n");
     if count > max_entries {
-        output.push_str(&format!("\n...+{} more entries ({} total)", count - max_entries, count));
+        output.push_str(&format!(
+            "\n...+{} more entries ({} total)",
+            count - max_entries,
+            count
+        ));
     }
     output
 }
@@ -449,7 +467,11 @@ fn compact_wc(raw_output: &str, max_lines: usize) -> String {
 
     // wc output is typically already compact (line count word count byte count filename)
     // Just normalize whitespace and limit lines
-    let lines: Vec<&str> = trimmed.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = trimmed
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
 
     if lines.len() <= max_lines {
         return lines.join("\n");
@@ -507,10 +529,7 @@ fn compact_tree(raw_output: &str, max_lines: usize, noise_dirs: &[String]) -> St
         result.push("");
         result.push(last);
         let pruned_note = if total_pruned < total_original {
-            format!(
-                " ({} noise lines pruned)",
-                total_original - total_pruned
-            )
+            format!(" ({} noise lines pruned)", total_original - total_pruned)
         } else {
             String::new()
         };
@@ -556,7 +575,10 @@ fn tree_indent_depth(line: &str) -> usize {
 /// returns the remaining text (the directory or file name).
 fn tree_entry_name(line: &str) -> &str {
     let s = line.trim_start_matches(|c: char| {
-        matches!(c, ' ' | '│' | '├' | '└' | '─' | '|' | '+' | '`' | '-' | '\t')
+        matches!(
+            c,
+            ' ' | '│' | '├' | '└' | '─' | '|' | '+' | '`' | '-' | '\t'
+        )
     });
     s.trim()
 }
@@ -594,9 +616,15 @@ fn prune_tree_noise(lines: &[&str], noise_dirs: &[String]) -> Vec<String> {
 
         if is_noise {
             // Replace with a summary marker, keeping the tree-drawing prefix
-            let prefix_end = line.len() - line.trim_start_matches(|c: char| {
-                matches!(c, ' ' | '│' | '├' | '└' | '─' | '|' | '+' | '`' | '-' | '\t')
-            }).len();
+            let prefix_end = line.len()
+                - line
+                    .trim_start_matches(|c: char| {
+                        matches!(
+                            c,
+                            ' ' | '│' | '├' | '└' | '─' | '|' | '+' | '`' | '-' | '\t'
+                        )
+                    })
+                    .len();
             let prefix = &line[..prefix_end];
             result.push(format!("{prefix}{name}/ [contents hidden]"));
             skip_depth = Some(depth);
@@ -624,9 +652,17 @@ mod tests {
         assert_eq!(classify("ls -la"), Some(FileCommand::Ls));
         assert_eq!(classify("ls"), Some(FileCommand::Ls));
         assert_eq!(classify("dir"), Some(FileCommand::Ls));
-        assert_eq!(classify("find . -name '*.rs'"), Some(FileCommand::Find));
+        // `find` is a file-search on Unix but text-search on Windows
+        if cfg!(target_os = "windows") {
+            assert_eq!(classify("find . -name '*.rs'"), None);
+        } else {
+            assert_eq!(classify("find . -name '*.rs'"), Some(FileCommand::Find));
+        }
         assert_eq!(classify("cat README.md"), Some(FileCommand::CatHeadTail));
-        assert_eq!(classify("head -n 20 file.txt"), Some(FileCommand::CatHeadTail));
+        assert_eq!(
+            classify("head -n 20 file.txt"),
+            Some(FileCommand::CatHeadTail)
+        );
         assert_eq!(classify("tail -f log.txt"), Some(FileCommand::CatHeadTail));
         assert_eq!(classify("wc -l file.txt"), Some(FileCommand::Wc));
         assert_eq!(classify("tree"), Some(FileCommand::Tree));
@@ -650,8 +686,13 @@ mod tests {
     #[test]
     fn handles_find_commands() {
         let opt = FileOptimizer::new();
-        assert!(opt.can_handle(&CommandContext::new("find . -name '*.rs'")));
-        assert!(opt.can_handle(&CommandContext::new("cd /repo && find . -type f")));
+        // `find` optimization only available on Unix-like platforms
+        if cfg!(target_os = "windows") {
+            assert!(!opt.can_handle(&CommandContext::new("find . -name '*.rs'")));
+        } else {
+            assert!(opt.can_handle(&CommandContext::new("find . -name '*.rs'")));
+            assert!(opt.can_handle(&CommandContext::new("cd /repo && find . -type f")));
+        }
     }
 
     #[test]
@@ -686,7 +727,10 @@ mod tests {
     #[test]
     fn compact_ls_simple_short() {
         let input = "file1.txt\nfile2.rs\nsrc\ntarget";
-        assert_eq!(compact_ls(input, 50, 60), "file1.txt\nfile2.rs\nsrc\ntarget");
+        assert_eq!(
+            compact_ls(input, 50, 60),
+            "file1.txt\nfile2.rs\nsrc\ntarget"
+        );
     }
 
     #[test]
@@ -746,7 +790,7 @@ mod tests {
         let input = lines.join("\n");
         let result = compact_cat(&input, 100, 60, 30);
         assert!(result.contains("lines omitted"));
-        assert!(result.contains("line 0"));   // head preserved
+        assert!(result.contains("line 0")); // head preserved
         assert!(result.contains("line 199")); // tail preserved
     }
 
@@ -962,7 +1006,9 @@ Mode                 LastWriteTime         Length Name
             "----                 -------------         ------ ----".to_string(),
         ];
         for i in 0..100 {
-            lines.push(format!("-a---          1/1/2026  12:00 PM          {i:>5} file{i}.txt"));
+            lines.push(format!(
+                "-a---          1/1/2026  12:00 PM          {i:>5} file{i}.txt"
+            ));
         }
         let input = lines.join("\n");
         let result = compact_ls(&input, 10, 60);

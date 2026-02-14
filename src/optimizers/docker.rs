@@ -144,12 +144,16 @@ impl Optimizer for DockerOptimizer {
         let optimized = match cmd {
             DockerCommand::Ps => compact_docker_ps(raw_output, self.ps_max_rows),
             DockerCommand::Images => compact_docker_images(raw_output, self.images_max_rows),
-            DockerCommand::Logs => compact_docker_logs(raw_output, self.logs_max_tail, self.logs_max_errors),
+            DockerCommand::Logs => {
+                compact_docker_logs(raw_output, self.logs_max_tail, self.logs_max_errors)
+            }
             DockerCommand::ComposePs => compact_compose_ps(raw_output, self.compose_max_rows),
             DockerCommand::Inspect => compact_docker_inspect(raw_output, self.inspect_max_lines),
             DockerCommand::Build => compact_docker_build(raw_output),
             DockerCommand::PullPush => compact_docker_pull_push(raw_output),
-            DockerCommand::ListResource => compact_docker_resource_list(raw_output, self.resource_max_rows),
+            DockerCommand::ListResource => {
+                compact_docker_resource_list(raw_output, self.resource_max_rows)
+            }
         };
 
         Ok(OptimizedOutput {
@@ -176,7 +180,10 @@ fn compact_docker_ps(raw_output: &str, max_rows: usize) -> String {
     let lines: Vec<&str> = trimmed.lines().collect();
     if lines.len() <= 1 {
         // Only header or empty
-        if lines.first().is_some_and(|l| l.to_ascii_lowercase().contains("container")) {
+        if lines
+            .first()
+            .is_some_and(|l| l.to_ascii_lowercase().contains("container"))
+        {
             return "No containers running".to_string();
         }
         return trimmed.to_string();
@@ -308,8 +315,11 @@ fn compact_docker_logs(raw_output: &str, max_tail: usize, max_errors: usize) -> 
     let mut error_lines: Vec<&str> = Vec::new();
     for line in &lines {
         let l = line.to_ascii_lowercase();
-        if (l.contains("error") || l.contains("fatal") || l.contains("panic")
-            || l.contains("exception") || l.contains("traceback"))
+        if (l.contains("error")
+            || l.contains("fatal")
+            || l.contains("panic")
+            || l.contains("exception")
+            || l.contains("traceback"))
             && error_lines.len() < max_errors
         {
             error_lines.push(line);
@@ -527,11 +537,7 @@ fn find_column_start(header: &str, name: &str) -> Option<usize> {
 }
 
 /// Extract a column value from a line given start and optional end positions.
-fn extract_column(
-    line: &str,
-    start: Option<usize>,
-    end: Option<usize>,
-) -> Option<&str> {
+fn extract_column(line: &str, start: Option<usize>, end: Option<usize>) -> Option<&str> {
     let s = start?;
     if s >= line.len() {
         return None;
@@ -592,14 +598,32 @@ mod tests {
         assert_eq!(classify("docker images"), Some(DockerCommand::Images));
         assert_eq!(classify("docker image ls"), Some(DockerCommand::Images));
         assert_eq!(classify("docker logs myapp"), Some(DockerCommand::Logs));
-        assert_eq!(classify("docker compose ps"), Some(DockerCommand::ComposePs));
-        assert_eq!(classify("docker-compose ps"), Some(DockerCommand::ComposePs));
-        assert_eq!(classify("docker inspect mycontainer"), Some(DockerCommand::Inspect));
+        assert_eq!(
+            classify("docker compose ps"),
+            Some(DockerCommand::ComposePs)
+        );
+        assert_eq!(
+            classify("docker-compose ps"),
+            Some(DockerCommand::ComposePs)
+        );
+        assert_eq!(
+            classify("docker inspect mycontainer"),
+            Some(DockerCommand::Inspect)
+        );
         assert_eq!(classify("docker build ."), Some(DockerCommand::Build));
         assert_eq!(classify("docker pull nginx"), Some(DockerCommand::PullPush));
-        assert_eq!(classify("docker push myapp:latest"), Some(DockerCommand::PullPush));
-        assert_eq!(classify("docker network ls"), Some(DockerCommand::ListResource));
-        assert_eq!(classify("docker volume ls"), Some(DockerCommand::ListResource));
+        assert_eq!(
+            classify("docker push myapp:latest"),
+            Some(DockerCommand::PullPush)
+        );
+        assert_eq!(
+            classify("docker network ls"),
+            Some(DockerCommand::ListResource)
+        );
+        assert_eq!(
+            classify("docker volume ls"),
+            Some(DockerCommand::ListResource)
+        );
         assert_eq!(classify("git status"), None);
         assert_eq!(classify("ls -la"), None);
     }

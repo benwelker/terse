@@ -34,6 +34,7 @@ fn classify(lower: &str) -> Option<BuildCommand> {
         || lower.starts_with("mvn test")
         || lower.starts_with("gradle test")
         || lower.starts_with("make test")
+        || lower.starts_with("nmake test")
     {
         return Some(BuildCommand::Test);
     }
@@ -59,6 +60,8 @@ fn classify(lower: &str) -> Option<BuildCommand> {
         || lower.starts_with("make")
         || lower.starts_with("cmake")
         || lower.starts_with("msbuild")
+        || lower.starts_with("nmake")
+        || lower.starts_with("nuget restore")
         || lower.starts_with("pip install")
         || lower.starts_with("pip3 install")
         || lower.starts_with("python -m pip")
@@ -147,10 +150,7 @@ impl Optimizer for BuildOptimizer {
                 self.build_max_error_lines,
                 self.build_max_warnings,
             ),
-            BuildCommand::Lint => compact_lint_output(
-                raw_output,
-                self.lint_max_issue_lines,
-            ),
+            BuildCommand::Lint => compact_lint_output(raw_output, self.lint_max_issue_lines),
         };
 
         Ok(OptimizedOutput {
@@ -306,7 +306,10 @@ fn compact_test_output(
             for w in warnings.iter().take(max_warnings) {
                 result.push(w.to_string());
             }
-            result.push(format!("...+{} more warnings", warnings.len() - max_warnings));
+            result.push(format!(
+                "...+{} more warnings",
+                warnings.len() - max_warnings
+            ));
         }
     }
 
@@ -415,11 +418,7 @@ fn is_pass_line(line: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Compact build/install output: show success/fail + errors only.
-fn compact_build_output(
-    raw_output: &str,
-    max_error_lines: usize,
-    max_warnings: usize,
-) -> String {
+fn compact_build_output(raw_output: &str, max_error_lines: usize, max_warnings: usize) -> String {
     let trimmed = raw_output.trim();
     if trimmed.is_empty() {
         return "Build completed (no output)".to_string();
@@ -529,7 +528,10 @@ fn compact_build_output(
             for w in warnings.iter().take(max_warnings) {
                 result.push(w.to_string());
             }
-            result.push(format!("...+{} more warnings", warnings.len() - max_warnings));
+            result.push(format!(
+                "...+{} more warnings",
+                warnings.len() - max_warnings
+            ));
         }
     }
 
@@ -579,8 +581,7 @@ fn compact_lint_output(raw_output: &str, max_issue_lines: usize) -> String {
         }
 
         // Summary lines
-        if lower.starts_with("warning:")
-            && lower.contains("generated")
+        if lower.starts_with("warning:") && lower.contains("generated")
             || lower.starts_with("error: could not compile")
             || lower.contains("problems found")
             || lower.contains("errors and")
@@ -697,7 +698,10 @@ mod tests {
         assert_eq!(classify("dotnet build"), Some(BuildCommand::Build));
         assert_eq!(classify("go build ./cmd/server"), Some(BuildCommand::Build));
         assert_eq!(classify("make"), Some(BuildCommand::Build));
-        assert_eq!(classify("pip install -r requirements.txt"), Some(BuildCommand::Build));
+        assert_eq!(
+            classify("pip install -r requirements.txt"),
+            Some(BuildCommand::Build)
+        );
     }
 
     #[test]
@@ -779,7 +783,10 @@ test result: FAILED. 2 passed; 1 failed; 0 ignored";
 
     #[test]
     fn build_output_empty() {
-        assert_eq!(compact_build_output("", 60, 10), "Build completed (no output)");
+        assert_eq!(
+            compact_build_output("", 60, 10),
+            "Build completed (no output)"
+        );
     }
 
     #[test]

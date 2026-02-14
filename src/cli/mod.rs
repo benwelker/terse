@@ -18,6 +18,7 @@ use crate::llm::config::SmartPathConfig;
 use crate::llm::ollama::OllamaClient;
 use crate::router;
 use crate::safety::circuit_breaker::CircuitBreaker;
+use crate::utils::process;
 
 /// Output format for analytics commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +75,7 @@ fn print_stats_table(stats: &Stats) {
     println!("  {} {}", "Total commands:".bold(), stats.total_commands);
     println!("  {} {}", "Tokens saved:  ".bold(), format_number(saved));
     println!(
-        "  {} {:.1}%",
+        "  {} {:.2}%",
         "Avg savings:   ".bold(),
         stats.total_savings_pct
     );
@@ -108,7 +109,7 @@ fn print_stats_table(stats: &Stats) {
                 .total_original_tokens
                 .saturating_sub(cmd.total_optimized_tokens);
             let line = format!(
-                "  {:<20} {:>6} {:>12} {:>9.1}% {}",
+                "  {:<20} {:>6} {:>12} {:>9.2}% {}",
                 truncate(&cmd.command, 20),
                 cmd.count,
                 format_number(saved),
@@ -154,7 +155,7 @@ fn print_stats_csv(stats: &Stats) {
     println!("command,count,original_tokens,optimized_tokens,avg_savings_pct,optimizer");
     for cmd in &stats.command_stats {
         println!(
-            "{},{},{},{},{:.1},{}",
+            "{},{},{},{},{:.2},{}",
             cmd.command,
             cmd.count,
             cmd.total_original_tokens,
@@ -201,7 +202,7 @@ fn print_trends_table(trends: &[TrendEntry], days: u32) {
 
     for entry in trends {
         println!(
-            "  {:<12} {:>8} {:>12} {:>9.1}%",
+            "  {:<12} {:>8} {:>12} {:>9.2}%",
             entry.date,
             entry.commands,
             format_number(entry.tokens_saved),
@@ -231,7 +232,7 @@ fn print_trends_csv(trends: &[TrendEntry]) {
     println!("date,commands,tokens_saved,avg_savings_pct");
     for t in trends {
         println!(
-            "{},{},{},{:.1}",
+            "{},{},{},{:.2}",
             t.date, t.commands, t.tokens_saved, t.avg_savings_pct,
         );
     }
@@ -330,6 +331,44 @@ pub fn run_health() -> Result<()> {
     println!("{}", "TERSE Health Check".bold().cyan());
     println!("{}", "=".repeat(40));
 
+    // Platform info
+    print_health_item(
+        "Platform",
+        true,
+        &format!(
+            "{} (shell: {}, binary: {})",
+            process::platform_name(),
+            process::default_shell(),
+            process::terse_binary_name(),
+        ),
+    );
+
+    // Terse home directory
+    let home_ok = process::terse_home_dir()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    print_health_item(
+        "Terse home",
+        home_ok,
+        &process::terse_home_dir()
+            .map(|p| process::to_display_path(&p.to_string_lossy()))
+            .unwrap_or_else(|| "unknown".to_string()),
+    );
+
+    // Claude settings
+    let claude_ok = process::claude_settings_path()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    print_health_item(
+        "Claude settings",
+        claude_ok,
+        if claude_ok {
+            "found"
+        } else {
+            "not found (run install script to register hook)"
+        },
+    );
+
     // 0. Config file status
     let global_exists = config::global_config_file()
         .map(|p| p.exists())
@@ -378,11 +417,14 @@ pub fn run_health() -> Result<()> {
     );
 
     if smart_config.enabled {
-        // 2. Ollama connectivity
+        // 2. Ollama binary & connectivity
+        let ollama_on_path = process::is_ollama_available();
         let client = OllamaClient::from_config(&smart_config);
-        let ollama_ok = client.is_healthy();
+        let ollama_ok = ollama_on_path && client.is_healthy();
         let ollama_detail = if ollama_ok {
             format!("reachable at {}", smart_config.ollama_url)
+        } else if !ollama_on_path {
+            "ollama binary not found on PATH".to_string()
         } else {
             "not reachable — is Ollama running?".to_string()
         };
@@ -426,7 +468,36 @@ pub fn run_health() -> Result<()> {
         },
     );
 
-    // 6. Hook registration hint
+    // 6. Key tool availability
+    let git_ok = process::is_command_available("git");
+    print_health_item(
+        "Git",
+        git_ok,
+        if git_ok { "found" } else { "not found" },
+    );
+
+    // 7. Binary location
+    if let Some(exe) = process::current_exe_path() {
+        let display = process::to_display_path(&exe.to_string_lossy());
+        let valid = process::is_executable(&exe);
+        print_health_item("Binary", valid, &display);
+    }
+
+    if let Some(bin_dir) = process::terse_bin_dir() {
+        let norm = process::normalize_path_separator(&bin_dir.to_string_lossy());
+        let in_bin = bin_dir.exists();
+        print_health_item(
+            "Install dir",
+            in_bin,
+            &format!(
+                "{}{}",
+                norm,
+                if in_bin { "" } else { " (not created)" }
+            ),
+        );
+    }
+
+    // 8. Hook registration hint
     println!();
     println!(
         "  {} Check ~/.claude/settings.json for hook registration",
@@ -515,16 +586,10 @@ pub fn run_config_init(force: bool) -> Result<()> {
 
         #[cfg(target_os = "windows")]
         {
-            println!(
-                "  {}",
-                "For current PowerShell session:".dimmed()
-            );
+            println!("  {}", "For current PowerShell session:".dimmed());
             println!("    $env:Path += \";{}\"", bin_dir.display());
             println!("  {}", "Persist for current user:".dimmed());
-            println!(
-                "    setx PATH \"$($env:Path);{}\"",
-                bin_dir.display()
-            );
+            println!("    setx PATH \"$($env:Path);{}\"", bin_dir.display());
         }
 
         #[cfg(not(target_os = "windows"))]
@@ -591,7 +656,7 @@ pub fn run_test(command: &str) -> Result<()> {
         let pp_pct = preview.execution.preprocessing_pct.unwrap_or(0.0);
         let pp_duration = preview.execution.preprocessing_duration_ms.unwrap_or(0);
         println!(
-            "  {} {} bytes removed ({:.1}%) in {}ms",
+            "  {} {} bytes removed ({:.2}%) in {}ms",
             "Preprocessing:".bold(),
             pp_bytes,
             pp_pct,
@@ -611,7 +676,7 @@ pub fn run_test(command: &str) -> Result<()> {
             (saved as f64 / tok_before as f64) * 100.0
         };
         println!(
-            "  {} {} → {} ({:.1}% savings)",
+            "  {} {} → {} ({:.2}% savings)",
             "PP tokens:    ".bold(),
             tok_before,
             tok_after,
@@ -656,11 +721,7 @@ pub fn run_test(command: &str) -> Result<()> {
     }
 
     if let Some(ref reason) = preview.execution.fallback_reason {
-        println!(
-            "  {} {}",
-            "Fallback:     ".bold(),
-            reason.yellow()
-        );
+        println!("  {} {}", "Fallback:     ".bold(), reason.yellow());
     }
 
     println!();

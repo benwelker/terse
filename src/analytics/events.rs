@@ -32,7 +32,6 @@ pub struct HookEvent {
     /// Reason for passthrough (if applicable).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passthrough_reason: Option<String>,
-
 }
 
 // ---------------------------------------------------------------------------

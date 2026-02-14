@@ -96,6 +96,17 @@ pub fn contains_heredoc(command: &str) -> bool {
         i += 1;
     }
 
+    // PowerShell here-strings: @"..."@ or @'...'@
+    if command.contains("@\"\n") || command.contains("@'\n") {
+        return true;
+    }
+    // Compact form (no newline between @" and content) — still a here-string
+    if command.contains("@\"") && command.contains("\"@")
+        || command.contains("@'") && command.contains("'@")
+    {
+        return true;
+    }
+
     false
 }
 
@@ -139,14 +150,41 @@ fn unwrap_subshell(s: &str) -> &str {
     }
 }
 
-/// Unwrap `bash -c "cmd"` / `sh -c "cmd"` shell wrappers.
+/// Unwrap shell wrappers across platforms.
+///
+/// Handles Unix shells (`bash -c`, `sh -c`) and Windows shells
+/// (`cmd /c`, `pwsh -Command`, `powershell -Command`).
 fn unwrap_shell_wrapper(s: &str) -> &str {
     let trimmed = s.trim();
+
+    // Unix shell wrappers
     for prefix in &["bash -c ", "sh -c "] {
         if let Some(rest) = ascii_prefix_strip(trimmed, prefix) {
             return strip_outer_quotes(rest.trim());
         }
     }
+
+    // Windows shell wrappers (cmd, pwsh, powershell).
+    // ascii_prefix_strip is case-insensitive so we only need lowercase.
+    for prefix in &[
+        "cmd /c ",
+        "cmd.exe /c ",
+        "pwsh -c ",
+        "pwsh -command ",
+        "pwsh.exe -c ",
+        "pwsh.exe -command ",
+        "pwsh -nologo -command ",
+        "pwsh -noprofile -command ",
+        "powershell -c ",
+        "powershell -command ",
+        "powershell.exe -c ",
+        "powershell.exe -command ",
+    ] {
+        if let Some(rest) = ascii_prefix_strip(trimmed, prefix) {
+            return strip_outer_quotes(rest.trim());
+        }
+    }
+
     trimmed
 }
 
@@ -606,5 +644,89 @@ mod tests {
     #[test]
     fn first_pipe_splits_single_pipe() {
         assert_eq!(first_pipe_segment("git log | head"), "git log");
+    }
+
+    // -----------------------------------------------------------------------
+    // Windows shell wrapper tests (Phase 10)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn unwraps_cmd_c() {
+        assert_eq!(extract_core_command("cmd /c git status"), "git status");
+    }
+
+    #[test]
+    fn unwraps_cmd_exe_c() {
+        assert_eq!(
+            extract_core_command("cmd.exe /c \"git status\""),
+            "git status"
+        );
+    }
+
+    #[test]
+    fn unwraps_pwsh_c() {
+        assert_eq!(extract_core_command("pwsh -c \"git status\""), "git status");
+    }
+
+    #[test]
+    fn unwraps_pwsh_command() {
+        assert_eq!(
+            extract_core_command("pwsh -Command \"git status\""),
+            "git status"
+        );
+    }
+
+    #[test]
+    fn unwraps_pwsh_exe_command() {
+        assert_eq!(
+            extract_core_command("pwsh.exe -Command \"git status\""),
+            "git status"
+        );
+    }
+
+    #[test]
+    fn unwraps_powershell_command() {
+        assert_eq!(
+            extract_core_command("powershell -Command \"git log --oneline\""),
+            "git log --oneline"
+        );
+    }
+
+    #[test]
+    fn unwraps_powershell_exe_c() {
+        assert_eq!(
+            extract_core_command("powershell.exe -c \"cargo test\""),
+            "cargo test"
+        );
+    }
+
+    #[test]
+    fn unwraps_pwsh_noprofile() {
+        assert_eq!(
+            extract_core_command("pwsh -NoProfile -Command \"git diff\""),
+            "git diff"
+        );
+    }
+
+    #[test]
+    fn pwsh_case_insensitive() {
+        assert_eq!(
+            extract_core_command("PWSH -COMMAND \"git status\""),
+            "git status"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // PowerShell here-string detection (Phase 10)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn detects_powershell_double_herestring() {
+        assert!(contains_heredoc("$text = @\"\nHello World\n\"@"));
+    }
+
+    #[test]
+    fn detects_powershell_single_herestring() {
+        assert!(contains_heredoc("$text = @'\nHello World\n'@"));
     }
 }
