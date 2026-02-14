@@ -17,6 +17,7 @@ cargo build --release
 
 # 2) Initialize config (optional but recommended)
 terse config init
+#    (also prints quick PATH setup commands so `terse` works from anywhere)
 
 # 3) Preview routing + optimization for a command
 terse test git status

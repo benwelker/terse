@@ -501,6 +501,44 @@ pub fn run_config_init(force: bool) -> Result<()> {
         "  {}",
         "Edit the file to customize TERSE behavior.".dimmed()
     );
+
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(bin_dir) = exe_path.parent()
+    {
+        println!();
+        println!("{}", "Quick PATH setup (optional)".bold().cyan());
+        println!(
+            "  {} {}",
+            "Detected TERSE binary directory:".dimmed(),
+            bin_dir.display()
+        );
+
+        #[cfg(target_os = "windows")]
+        {
+            println!(
+                "  {}",
+                "For current PowerShell session:".dimmed()
+            );
+            println!("    $env:Path += \";{}\"", bin_dir.display());
+            println!("  {}", "Persist for current user:".dimmed());
+            println!(
+                "    setx PATH \"$($env:Path);{}\"",
+                bin_dir.display()
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            println!("  {}", "For current shell session:".dimmed());
+            println!("    export PATH=\"$PATH:{}\"", bin_dir.display());
+            println!(
+                "  {}",
+                "Persist (bash/zsh): add this line to your shell profile:".dimmed()
+            );
+            println!("    export PATH=\"$PATH:{}\"", bin_dir.display());
+        }
+    }
+
     Ok(())
 }
 
