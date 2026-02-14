@@ -887,14 +887,16 @@ fn uninstall_deregister_hook() {
                 if removed > 0 {
                     // Clean up empty PreToolUse array
                     if arr.is_empty()
-                        && let Some(hooks_obj) = hooks.as_object_mut() {
-                            hooks_obj.remove("PreToolUse");
-                            // Clean up empty hooks object
-                            if hooks_obj.is_empty()
-                                && let Some(root) = settings.as_object_mut() {
-                                    root.remove("hooks");
-                                }
+                        && let Some(hooks_obj) = hooks.as_object_mut()
+                    {
+                        hooks_obj.remove("PreToolUse");
+                        // Clean up empty hooks object
+                        if hooks_obj.is_empty()
+                            && let Some(root) = settings.as_object_mut()
+                        {
+                            root.remove("hooks");
                         }
+                    }
                     true
                 } else {
                     false
@@ -937,16 +939,20 @@ fn is_terse_hook_entry(entry: &serde_json::Value) -> bool {
     if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
         for hook in hooks {
             if let Some(cmd) = hook.get("command").and_then(|c| c.as_str())
-                && cmd.contains("terse") && cmd.contains("hook") {
-                    return true;
-                }
+                && cmd.contains("terse")
+                && cmd.contains("hook")
+            {
+                return true;
+            }
         }
     }
     // Legacy flat format: { "type": "command", "command": "...terse...hook..." }
     if let Some(cmd) = entry.get("command").and_then(|c| c.as_str())
-        && cmd.contains("terse") && cmd.contains("hook") {
-            return true;
-        }
+        && cmd.contains("terse")
+        && cmd.contains("hook")
+    {
+        return true;
+    }
     false
 }
 
@@ -1445,9 +1451,10 @@ fn find_file_recursive(dir: &std::path::Path, name: &str) -> Option<std::path::P
                 return Some(path);
             }
             if path.is_dir()
-                && let Some(found) = find_file_recursive(&path, name) {
-                    return Some(found);
-                }
+                && let Some(found) = find_file_recursive(&path, name)
+            {
+                return Some(found);
+            }
         }
     }
     None
