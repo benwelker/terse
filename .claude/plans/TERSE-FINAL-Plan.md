@@ -499,7 +499,7 @@ Total Tokens Saved: 29,880 (78.4% average)
 
 ---
 
-### Phase 5-1: Smart Path Preprocessing Pipeline (Week 6, alongside Phase 6)
+### Phase 5-1: Smart Path Preprocessing Pipeline (Week 6, alongside Phase 6) ✅ COMPLETE
 
 **Goal:** Reduce raw output size by 40–70% _before_ sending to the LLM, improving smart path quality, latency, and token efficiency. Rust-based preprocessing is deterministic, fast (<5ms), and runs as a pipeline stage between raw command execution and LLM optimization.
 
@@ -509,13 +509,13 @@ Total Tokens Saved: 29,880 (78.4% average)
 
 **Deliverables:**
 
-- [ ] Create `src/preprocessing/mod.rs` — pipeline orchestrator:
+- [x] Create `src/preprocessing/mod.rs` — pipeline orchestrator:
   - `preprocess(raw: &str, command: &str) -> PreprocessedOutput`
   - `PreprocessedOutput` struct: `{ text: String, original_bytes: usize, preprocessed_bytes: usize, stages_applied: Vec<&'static str> }`
   - Pipeline runs stages in order; each stage receives the output of the previous
   - Entire pipeline target: <5ms for 100 KB input
 
-- [ ] Implement `src/preprocessing/noise.rs` — universal noise removal:
+- [x] Implement `src/preprocessing/noise.rs` — universal noise removal:
   - Strip ANSI escape codes / color sequences (`\x1b[...m`, `\x1b[...K`, etc.)
   - Remove progress bars, spinners, and carriage-return overwrite lines (`\r` without `\n`)
   - Strip download/upload progress indicators (e.g., `Downloading... 45%`, `████░░░░ 50%`)
@@ -528,7 +528,7 @@ Total Tokens Saved: 29,880 (78.4% average)
     - pip: `Requirement already satisfied`, `Successfully installed ...`
   - Configurable: boilerplate patterns stored as a list for future user extension
 
-- [ ] Implement `src/preprocessing/path_filter.rs` — directory/path noise filtering:
+- [x] Implement `src/preprocessing/path_filter.rs` — directory/path noise filtering:
   - Comprehensive list of directories safe to filter from output:
     - **JavaScript/Node:** `node_modules`, `dist`, `.next`, `.nuxt`, `.cache`, `coverage`, `.turbo`
     - **Rust:** `target/debug`, `target/release`, `target/.fingerprint`, `target/build`
@@ -543,37 +543,37 @@ Total Tokens Saved: 29,880 (78.4% average)
     - **Summary**: replace N filtered lines with `[filtered N lines matching node_modules/*, dist/*, ...]`
   - Default: summary mode (preserves awareness that content was removed)
 
-- [ ] Implement `src/preprocessing/dedup.rs` — repetitive content deduplication:
+- [x] Implement `src/preprocessing/dedup.rs` — repetitive content deduplication:
   - Detect and collapse repeated lines (e.g., 200 `PASS src/tests/...` lines → `[200× PASS] src/tests/...`)
   - Detect and collapse repeated blocks (e.g., same warning repeated across files)
   - Similarity threshold: exact match for lines, configurable for blocks (future)
   - Preserve first and last occurrence with count annotation
   - Handle numbered sequences (e.g., `test 1/200`, `test 2/200` → `[tests 1–200/200: all passing]`)
 
-- [ ] Implement `src/preprocessing/truncation.rs` — truncation with context preservation:
+- [x] Implement `src/preprocessing/truncation.rs` — truncation with context preservation:
   - If preprocessed output still exceeds a max size (default: 32 KB), truncate intelligently:
     - Preserve first N lines (command header / summary) and last M lines (final result / totals)
     - Insert `[... truncated {X} lines ({Y} bytes) ...]` marker in the middle
     - For structured output (e.g., test results), prefer keeping failures over passes
   - Section-aware truncation (future): detect sections by headers/blank-line boundaries, keep section starts
 
-- [ ] Implement `src/preprocessing/trim.rs` — final whitespace normalization:
+- [x] Implement `src/preprocessing/trim.rs` — final whitespace normalization:
   - Trim leading/trailing whitespace from full output
   - Normalize line endings to `\n`
   - Collapse runs of 3+ blank lines to 1 blank line (reinforces noise removal)
   - Strip any remaining trailing whitespace per line
 
-- [ ] Wire preprocessing into the router's smart path in `src/router/mod.rs`:
+- [x] Wire preprocessing into the router's smart path in `src/router/mod.rs`:
   - Before calling `llm::optimize_with_llm()`, run `preprocess(raw_text, command)`
   - Pass `preprocessed.text` to LLM instead of `raw_text`
   - Log preprocessing stats: original bytes, preprocessed bytes, stages applied
   - Update `ExecutionResult` to optionally carry preprocessing metadata
 
-- [ ] Add analytics tracking for preprocessing effectiveness:
+- [x] Add analytics tracking for preprocessing effectiveness:
   - Log `preprocessing_bytes_removed` and `preprocessing_pct` in command-log.jsonl
   - Add preprocessing stats to `terse stats` output
 
-- [ ] Write unit tests:
+- [x] Write unit tests:
   - Noise removal: ANSI codes, progress bars, boilerplate patterns
   - Path filtering: node_modules paths, target/debug paths, mixed output
   - Deduplication: repeated lines, repeated blocks, numbered sequences
@@ -612,7 +612,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 6: Configuration System (Week 6–7)
+### Phase 6: Configuration System (Week 6–7) ✅ COMPLETE
 
 **Goal:** User control over all behavior without code changes.
 
@@ -620,8 +620,8 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 **Deliverables:**
 
-- [ ] Add `toml` crate to `Cargo.toml`
-- [ ] Implement `src/config/schema.rs` — full config schema with defaults:
+- [x] Add `toml` crate to `Cargo.toml`
+- [x] Implement `src/config/schema.rs` — full config schema with defaults:
 
   ```toml
   [general]
@@ -687,15 +687,15 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
   trim_trailing = true
   ```
 
-- [ ] Implement `src/config/mod.rs` — config hierarchy:
+- [x] Implement `src/config/mod.rs` — config hierarchy:
   - Built-in defaults → `~/.terse/config.toml` (user global) → `.terse.toml` (project local)
   - Later entries override earlier ones
-- [ ] Add CLI config commands:
+- [x] Add CLI config commands:
   - `terse config show` — display effective config
   - `terse config init` — create default config file
   - `terse config set <key> <value>` — update a setting
   - `terse config reset` — reset to defaults
-- [ ] Add performance profiles as named presets:
+- [x] Add performance profiles as named presets:
   - **fast**: prefers fast path, smart path min 1000 chars, timeout 50ms
   - **balanced**: default settings
   - **quality**: prefers smart path, min 200 chars, higher LLM timeout
@@ -710,7 +710,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 7: Expanded Optimizers (Week 7–8)
+### Phase 7: Expanded Optimizers (Week 7–8) ⏭️ NEXT
 
 **Goal:** Cover 80%+ of commands by frequency with rule-based fast path.
 
