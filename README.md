@@ -11,24 +11,71 @@
 
 terse is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
 
-## Quick demo
+## Installation
+
+### One-liner install (recommended)
+
+Downloads the latest release binary, places it in `~/.terse/bin/`, creates a default config, and registers the Claude Code hook — all automatically.
+
+**macOS / Linux:**
 
 ```bash
-# 1) Build
+curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.ps1 | iex
+```
+
+Both scripts will:
+
+1. Download the correct binary for your platform/architecture
+2. Place it in `~/.terse/bin/` and add to PATH
+3. Generate a default `~/.terse/config.toml`
+4. Check for Ollama availability (optional, for Smart Path)
+5. Register the PreToolUse hook in `~/.claude/settings.json`
+
+To uninstall:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/scripts/uninstall.sh | bash
+
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/benwelker/terse/master/scripts/uninstall.ps1 | iex
+```
+
+### From source
+
+```bash
+git clone https://github.com/benwelker/terse.git
+cd terse
 cargo build --release
+```
 
-# 2) Initialize config (optional but recommended)
-terse config init
-#    (also prints quick PATH setup commands so `terse` works from anywhere)
+Binary path after release build:
 
-# 3) Preview routing + optimization for a command
+- Windows: `target\release\terse.exe`
+- macOS/Linux: `target/release/terse`
+
+After building from source, run `terse config init` to create your config and see PATH setup instructions, then register the hook manually (see [Hook setup](#hook-setup-manual--from-source-builds) below).
+
+## Quick start
+
+```bash
+# Verify installation
+terse health
+
+# Preview routing + optimization for a command
 terse test git status
 
-# 4) View aggregate token savings after usage
+# View aggregate token savings after usage
 terse stats
 ```
 
-Example `terse test git status` (shape):
+Example `terse test git status` output:
 
 ```text
 terse Optimization Preview
@@ -99,50 +146,9 @@ Never optimized:
 4. Router preprocesses output and selects path based on config + output size
 5. Optimized output is printed to stdout and logged
 
-## Installation
+## Hook setup (manual / from-source builds)
 
-### One-liner install (recommended)
-
-Downloads the latest release binary, places it in `~/.terse/bin/`, creates a default config, and registers the Claude Code hook automatically.
-
-**macOS / Linux:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.sh | bash
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.ps1 | iex
-```
-
-Both scripts will:
-
-1. Download the correct binary for your platform/architecture
-2. Place it in `~/.terse/bin/`
-3. Generate a default `~/.terse/config.toml`
-4. Check for Ollama availability
-5. Register the PreToolUse hook in `~/.claude/settings.json`
-
-### From source
-
-```bash
-git clone https://github.com/benwelker/terse.git
-cd terse
-cargo build --release
-```
-
-Binary path after release build:
-
-- Windows: `target\release\terse.exe`
-- macOS/Linux: `target/release/terse`
-
-## Hook setup (Claude Code)
-
-Add a PreToolUse hook entry to your Claude settings file (`~/.claude/settings.json`), pointing to your terse binary.
-
-Example (Windows):
+If you used the install script, the hook is already registered. For manual or from-source installs, add a PreToolUse hook entry to `~/.claude/settings.json`:
 
 ```json
 {
@@ -153,7 +159,7 @@ Example (Windows):
         "hooks": [
           {
             "type": "command",
-            "command": "C:\\path\\to\\terse.exe hook"
+            "command": "/path/to/terse hook"
           }
         ]
       }
