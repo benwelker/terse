@@ -255,8 +255,8 @@ impl OllamaClient {
 /// exceeding a 10 GB RTX 3080). This forces CPU inference and ~60 s latency.
 ///
 /// Setting `num_ctx` explicitly keeps the entire model + KV cache in VRAM.
-/// For a 1B q4 model at 16K context: ~700 MB weights + ~500 MB KV cache =
-/// ~1.2 GB total — well within a 10 GB GPU.
+/// For a 1B q4 model at 40K context: ~700 MB weights + ~1300 MB KV cache =
+/// ~2 GB total.
 ///
 /// The context window is the TOTAL budget for input + output tokens.
 /// Our prompts use up to ~5K tokens (16K chars / 4 + template overhead),
