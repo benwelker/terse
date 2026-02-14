@@ -1,5 +1,7 @@
 # TERSE
 
+**🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
+
 [![Rust Edition](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](Cargo.toml)
 [![CLI](https://img.shields.io/badge/type-CLI-informational)](#cli-usage)
@@ -8,8 +10,6 @@
 **Token Efficiency through Refined Stream Engineering**
 
 TERSE is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
-
-**🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
 
 ## Quick demo
 

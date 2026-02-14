@@ -255,10 +255,10 @@ fn your_optimizer_handles_commands() {
 
 Every optimizer receives a `CommandContext` with two fields:
 
-| Field      | Description                                                  | Example                              |
-|------------|--------------------------------------------------------------|--------------------------------------|
-| `original` | Full command as sent by Claude Code                          | `cd /repo && LANG=C mytool list`     |
-| `core`     | Extracted command (stripped of `cd`, env vars, pipes, shells) | `mytool list`                        |
+| Field      | Description                                                   | Example                          |
+| ---------- | ------------------------------------------------------------- | -------------------------------- |
+| `original` | Full command as sent by Claude Code                           | `cd /repo && LANG=C mytool list` |
+| `core`     | Extracted command (stripped of `cd`, env vars, pipes, shells) | `mytool list`                    |
 
 Use `ctx.core` for matching/routing. The matching engine (in `src/matching/mod.rs`) handles stripping `cd`, `&&` chains, `bash -c` wrappers, environment variables, and pipe segments automatically.
 
@@ -318,10 +318,10 @@ Any error in an optimizer must result in a **graceful passthrough** — return t
 
 Existing optimizers use two main strategies. Pick the one that fits:
 
-| Strategy                | When to use                                        | Example                      |
-|-------------------------|----------------------------------------------------|------------------------------|
-| **Output post-processing** | Transform output after the command runs           | `git diff` → compact hunks   |
-| **Command substitution**   | Replace the command with a more efficient variant  | `git log` → `git log --oneline -n 20` |
+| Strategy                   | When to use                                       | Example                               |
+| -------------------------- | ------------------------------------------------- | ------------------------------------- |
+| **Output post-processing** | Transform output after the command runs           | `git diff` → compact hunks            |
+| **Command substitution**   | Replace the command with a more efficient variant | `git log` → `git log --oneline -n 20` |
 
 Most optimizers use **output post-processing**. Command substitution is used by `git log` and `git status` where a different command produces inherently smaller output.
 
@@ -352,10 +352,10 @@ Before submitting a new optimizer:
 
 ## Reference Implementations
 
-| Optimizer | File | Complexity | Good example for |
-|-----------|------|------------|------------------|
-| Generic   | `src/optimizers/generic.rs` | Simple | Minimal trait implementation, config pattern |
-| File      | `src/optimizers/file.rs` | Medium | Multiple subcommands, varied compaction strategies |
-| Docker    | `src/optimizers/docker.rs` | Medium | Subcommand enum, table reformatting, noise stripping |
-| Build     | `src/optimizers/build.rs` | Medium | Error/warning extraction, cross-tool detection |
-| Git       | `src/optimizers/git.rs` | Complex | Command substitution + post-processing, full featured |
+| Optimizer | File                        | Complexity | Good example for                                      |
+| --------- | --------------------------- | ---------- | ----------------------------------------------------- |
+| Generic   | `src/optimizers/generic.rs` | Simple     | Minimal trait implementation, config pattern          |
+| File      | `src/optimizers/file.rs`    | Medium     | Multiple subcommands, varied compaction strategies    |
+| Docker    | `src/optimizers/docker.rs`  | Medium     | Subcommand enum, table reformatting, noise stripping  |
+| Build     | `src/optimizers/build.rs`   | Medium     | Error/warning extraction, cross-tool detection        |
+| Git       | `src/optimizers/git.rs`     | Complex    | Command substitution + post-processing, full featured |
