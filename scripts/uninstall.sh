@@ -102,7 +102,16 @@ modified = False
 hooks = settings.get('hooks', {})
 pre = hooks.get('PreToolUse', [])
 
-filtered = [h for h in pre if 'terse' not in h.get('command', '') or 'hook' not in h.get('command', '')]
+def has_terse(entry):
+    # New matcher-based format: {'matcher': {}, 'hooks': [{'command': '...'}]}
+    if 'hooks' in entry and isinstance(entry['hooks'], list):
+        return any('terse' in h.get('command', '') and 'hook' in h.get('command', '')
+                   for h in entry['hooks'])
+    # Legacy flat format: {'type': 'command', 'command': '...'}
+    cmd = entry.get('command', '')
+    return 'terse' in cmd and 'hook' in cmd
+
+filtered = [h for h in pre if not has_terse(h)]
 
 if len(filtered) < len(pre):
     modified = True

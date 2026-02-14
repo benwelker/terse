@@ -243,7 +243,12 @@ except:
     settings = {}
 hooks = settings.setdefault('hooks', {})
 pre = hooks.setdefault('PreToolUse', [])
-pre.append({'type': 'command', 'command': '$HOOK_CMD'})
+# New matcher-based format
+entry = {
+    'matcher': {},
+    'hooks': [{'type': 'command', 'command': '$HOOK_CMD'}]
+}
+pre.append(entry)
 with open('$CLAUDE_SETTINGS', 'w') as f:
     json.dump(settings, f, indent=2)
 print('ok')
@@ -259,7 +264,11 @@ else
     if command -v python3 &>/dev/null; then
         python3 -c "
 import json
-settings = {'hooks': {'PreToolUse': [{'type': 'command', 'command': '$HOOK_CMD'}]}}
+entry = {
+    'matcher': {},
+    'hooks': [{'type': 'command', 'command': '$HOOK_CMD'}]
+}
+settings = {'hooks': {'PreToolUse': [entry]}}
 with open('$CLAUDE_SETTINGS', 'w') as f:
     json.dump(settings, f, indent=2)
 print('ok')
@@ -278,7 +287,12 @@ if [ ! -f "$CLAUDE_SETTINGS" ] || ! grep -q "terse.*hook" "$CLAUDE_SETTINGS" 2>/
     {
       "hooks": {
         "PreToolUse": [
-          { "type": "command", "command": "$HOOK_CMD" }
+          {
+            "matcher": {},
+            "hooks": [
+              { "type": "command", "command": "$HOOK_CMD" }
+            ]
+          }
         ]
       }
     }
