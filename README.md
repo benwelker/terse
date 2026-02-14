@@ -9,6 +9,8 @@
 
 TERSE is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
 
+**🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
+
 ## Quick demo
 
 ```bash

@@ -741,6 +741,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 - [ ] Update optimizer registry to include all new modules
 - [ ] Write unit tests for each optimizer against sample outputs
 - [ ] Before/after token comparison documentation
+- [ ] Add documentation for how to add additional optimizers
 
 **Success Criteria:**
 

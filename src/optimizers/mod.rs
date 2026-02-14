@@ -1,9 +1,18 @@
 use anyhow::Result;
 
+use crate::config::schema::OptimizersConfig;
 use crate::matching;
 
+pub mod build;
+pub mod docker;
+pub mod file;
+pub mod generic;
 pub mod git;
 
+pub use build::BuildOptimizer;
+pub use docker::DockerOptimizer;
+pub use file::FileOptimizer;
+pub use generic::GenericOptimizer;
 pub use git::GitOptimizer;
 
 /// Output produced by an optimizer after post-processing raw command output.
@@ -73,9 +82,23 @@ impl Default for OptimizerRegistry {
 }
 
 impl OptimizerRegistry {
+    /// Create a registry using default limits for all optimizers.
     pub fn new() -> Self {
+        Self::from_config(&OptimizersConfig::default())
+    }
+
+    /// Create a registry using limits from the given config.
+    pub fn from_config(cfg: &OptimizersConfig) -> Self {
         Self {
-            optimizers: vec![Box::new(GitOptimizer::new())],
+            optimizers: vec![
+                // Specialized optimizers (tried first, in priority order)
+                Box::new(GitOptimizer::from_config(&cfg.git)),
+                Box::new(FileOptimizer::from_config(&cfg.file)),
+                Box::new(BuildOptimizer::from_config(&cfg.build)),
+                Box::new(DockerOptimizer::from_config(&cfg.docker)),
+                // Generic fallback (tried last — catches everything)
+                Box::new(GenericOptimizer::from_config(&cfg.generic)),
+            ],
         }
     }
 

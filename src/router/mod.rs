@@ -166,7 +166,7 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         cfg.router.circuit_breaker_threshold,
         cfg.router.circuit_breaker_cooldown_secs,
     );
-    let registry = OptimizerRegistry::new();
+    let registry = OptimizerRegistry::from_config(&cfg.optimizers);
     let (passthrough_threshold, smart_path_threshold) = load_thresholds();
     let mode = &cfg.general.mode;
 

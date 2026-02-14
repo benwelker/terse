@@ -1,5 +1,6 @@
 use anyhow::{Result, anyhow};
 
+use crate::config::schema::GitOptimizerConfig;
 use crate::optimizers::{CommandContext, OptimizedOutput, Optimizer};
 use crate::utils::process::run_shell_command;
 use crate::utils::token_counter::estimate_tokens;
@@ -93,17 +94,38 @@ fn stash_subcommand(lower: &str) -> &str {
 // Optimizer
 // ---------------------------------------------------------------------------
 
-pub struct GitOptimizer;
+pub struct GitOptimizer {
+    log_max_entries: usize,
+    log_default_limit: usize,
+    log_line_max_chars: usize,
+    diff_max_hunk_lines: usize,
+    diff_max_total_lines: usize,
+    branch_max_local: usize,
+    branch_max_remote: usize,
+}
 
 impl Default for GitOptimizer {
     fn default() -> Self {
-        Self
+        Self::new()
     }
 }
 
 impl GitOptimizer {
     pub fn new() -> Self {
-        Self
+        Self::from_config(&GitOptimizerConfig::default())
+    }
+
+    /// Create a `GitOptimizer` from the configuration.
+    pub fn from_config(cfg: &GitOptimizerConfig) -> Self {
+        Self {
+            log_max_entries: cfg.log_max_entries,
+            log_default_limit: cfg.log_default_limit,
+            log_line_max_chars: cfg.log_line_max_chars,
+            diff_max_hunk_lines: cfg.diff_max_hunk_lines,
+            diff_max_total_lines: cfg.diff_max_total_lines,
+            branch_max_local: cfg.branch_max_local,
+            branch_max_remote: cfg.branch_max_remote,
+        }
     }
 }
 
@@ -145,11 +167,23 @@ impl Optimizer for GitOptimizer {
 
         let optimized = match subcommand {
             GitSubcommand::Status => optimize_status(ctx)?,
-            GitSubcommand::Log => optimize_log(ctx, &lower, raw_output)?,
-            GitSubcommand::Diff => compact_diff_with_stat(raw_output),
-            GitSubcommand::Branch => compact_git_branches(raw_output),
-            GitSubcommand::Show => compact_git_show(raw_output),
-            GitSubcommand::Stash => optimize_stash(&lower, raw_output),
+            GitSubcommand::Log => optimize_log(
+                ctx, &lower, raw_output,
+                self.log_max_entries, self.log_default_limit, self.log_line_max_chars,
+            )?,
+            GitSubcommand::Diff => compact_diff_with_stat(
+                raw_output, self.diff_max_hunk_lines, self.diff_max_total_lines,
+            ),
+            GitSubcommand::Branch => compact_git_branches(
+                raw_output, self.branch_max_local, self.branch_max_remote,
+            ),
+            GitSubcommand::Show => compact_git_show(
+                raw_output, self.diff_max_hunk_lines, self.diff_max_total_lines,
+            ),
+            GitSubcommand::Stash => optimize_stash(
+                &lower, raw_output,
+                self.diff_max_hunk_lines, self.diff_max_total_lines,
+            ),
             GitSubcommand::Worktree => compact_worktree_list(raw_output),
             GitSubcommand::ShortStatus => summarize_git_operation(&lower, raw_output),
         };
@@ -276,13 +310,20 @@ fn append_file_list(output: &mut String, files: &[&str], max: usize) {
 /// - Adds `--oneline` only if the user hasn't specified `--oneline`, `--pretty`,
 ///   or `--format`.
 /// - Adds `-n 20` only if the user hasn't specified a numeric limit.
-fn optimize_log(ctx: &CommandContext, core: &str, raw_text: &str) -> Result<String> {
+fn optimize_log(
+    ctx: &CommandContext,
+    core: &str,
+    raw_text: &str,
+    log_max_entries: usize,
+    log_default_limit: usize,
+    log_line_max_chars: usize,
+) -> Result<String> {
     let has_format = has_flag(core, &["--oneline", "--pretty", "--format"]);
     let has_limit = has_numeric_limit(core) || has_flag(core, &["-n"]);
 
     if has_format && has_limit {
         // User already specified both — just filter the raw output for length.
-        return Ok(filter_log_output(raw_text, 50));
+        return Ok(filter_log_output(raw_text, log_max_entries, log_line_max_chars));
     }
 
     // Build substitution target with only the missing defaults.
@@ -291,20 +332,20 @@ fn optimize_log(ctx: &CommandContext, core: &str, raw_text: &str) -> Result<Stri
         to.push_str(" --oneline");
     }
     if !has_limit {
-        to.push_str(" -n 20");
+        to.push_str(&format!(" -n {log_default_limit}"));
     }
 
     optimize_with_substitution(ctx.original, "git log", &to)
 }
 
 /// Truncate and cap long log output.
-fn filter_log_output(output: &str, limit: usize) -> String {
+fn filter_log_output(output: &str, limit: usize, line_max_chars: usize) -> String {
     output
         .lines()
         .take(limit)
         .map(|line| {
-            if line.len() > 120 {
-                let truncated: String = line.chars().take(117).collect();
+            if line.len() > line_max_chars {
+                let truncated: String = line.chars().take(line_max_chars - 3).collect();
                 format!("{truncated}...")
             } else {
                 line.to_string()
@@ -319,13 +360,17 @@ fn filter_log_output(output: &str, limit: usize) -> String {
 // ---------------------------------------------------------------------------
 
 /// Produce a stat summary followed by compacted diff hunks.
-fn compact_diff_with_stat(raw_output: &str) -> String {
+fn compact_diff_with_stat(
+    raw_output: &str,
+    max_hunk_lines: usize,
+    max_total_lines: usize,
+) -> String {
     if raw_output.trim().is_empty() {
         return "No changes".to_string();
     }
 
     let stat = generate_diff_stat(raw_output);
-    let hunks = compact_diff_hunks(raw_output);
+    let hunks = compact_diff_hunks(raw_output, max_hunk_lines, max_total_lines);
 
     if stat.is_empty() && hunks.is_empty() {
         return raw_output.trim().to_string();
@@ -390,10 +435,13 @@ fn generate_diff_stat(diff_text: &str) -> String {
 }
 
 /// Compact diff hunks with per-hunk line limits.
-fn compact_diff_hunks(diff_text: &str) -> String {
+fn compact_diff_hunks(
+    diff_text: &str,
+    max_hunk_lines: usize,
+    max_total_lines: usize,
+) -> String {
     let mut kept = Vec::new();
     let mut hunk_lines = 0usize;
-    let max_hunk_lines: usize = 15;
 
     for line in diff_text.lines() {
         if line.starts_with("diff --git") {
@@ -414,7 +462,7 @@ fn compact_diff_hunks(diff_text: &str) -> String {
             }
         }
 
-        if kept.len() >= 200 {
+        if kept.len() >= max_total_lines {
             kept.push("...(diff truncated)");
             break;
         }
@@ -427,7 +475,11 @@ fn compact_diff_hunks(diff_text: &str) -> String {
 // Branch — compact list with remote dedup
 // ---------------------------------------------------------------------------
 
-fn compact_git_branches(raw_output: &str) -> String {
+fn compact_git_branches(
+    raw_output: &str,
+    max_local: usize,
+    max_remote: usize,
+) -> String {
     let mut current = String::new();
     let mut local: Vec<String> = Vec::new();
     let mut remote: Vec<String> = Vec::new();
@@ -449,9 +501,6 @@ fn compact_git_branches(raw_output: &str) -> String {
             local.push(trimmed.to_string());
         }
     }
-
-    let max_local: usize = 20;
-    let max_remote: usize = 10;
 
     let mut result = Vec::new();
 
@@ -497,7 +546,11 @@ fn compact_git_branches(raw_output: &str) -> String {
 // Show — commit summary + stat + compact diff
 // ---------------------------------------------------------------------------
 
-fn compact_git_show(raw_output: &str) -> String {
+fn compact_git_show(
+    raw_output: &str,
+    max_hunk_lines: usize,
+    max_total_lines: usize,
+) -> String {
     // Split at first "diff --git" to separate metadata from diff.
     let (metadata, diff_part) = match raw_output.find("diff --git") {
         Some(pos) => (&raw_output[..pos], &raw_output[pos..]),
@@ -526,7 +579,7 @@ fn compact_git_show(raw_output: &str) -> String {
     }
 
     // Compact diff hunks.
-    let compact = compact_diff_hunks(diff_part);
+    let compact = compact_diff_hunks(diff_part, max_hunk_lines, max_total_lines);
     if !compact.is_empty() {
         result.push('\n');
         result.push_str(&compact);
@@ -539,11 +592,16 @@ fn compact_git_show(raw_output: &str) -> String {
 // Stash — list/show compact, actions summarized
 // ---------------------------------------------------------------------------
 
-fn optimize_stash(core: &str, raw_output: &str) -> String {
+fn optimize_stash(
+    core: &str,
+    raw_output: &str,
+    max_hunk_lines: usize,
+    max_total_lines: usize,
+) -> String {
     let sub = stash_subcommand(core);
     match sub {
         "list" => compact_stash_list(raw_output),
-        "show" => compact_diff_with_stat(raw_output),
+        "show" => compact_diff_with_stat(raw_output, max_hunk_lines, max_total_lines),
         _ => summarize_stash_operation(sub, raw_output),
     }
 }
@@ -879,7 +937,7 @@ diff --git a/b.rs b/b.rs
         for i in 0..30 {
             diff.push_str(&format!("+line {i}\n"));
         }
-        let compact = compact_diff_hunks(&diff);
+        let compact = compact_diff_hunks(&diff, 15, 200);
         let plus_lines = compact
             .lines()
             .filter(|l| l.starts_with('+') && !l.starts_with("+++"))
@@ -898,7 +956,7 @@ diff --git a/b.rs b/b.rs
         for _ in 0..5 {
             diff.push_str("+line2\n");
         }
-        let compact = compact_diff_hunks(&diff);
+        let compact = compact_diff_hunks(&diff, 15, 200);
         // Second hunk should be fully included (only 5 lines)
         let hunk2_lines = compact.lines().filter(|l| l.starts_with("+line2")).count();
         assert_eq!(hunk2_lines, 5);
@@ -909,7 +967,7 @@ diff --git a/b.rs b/b.rs
     #[test]
     fn compacts_local_branches() {
         let raw = "  main\n* feature/new-api\n  release\n";
-        let compact = compact_git_branches(raw);
+        let compact = compact_git_branches(raw, 20, 10);
         assert!(compact.contains("branches: 3 local"));
         assert!(compact.contains("* feature/new-api"));
         assert!(compact.contains("main"));
@@ -926,7 +984,7 @@ diff --git a/b.rs b/b.rs
   remotes/origin/feature/auth
   remotes/origin/release/v2
 ";
-        let compact = compact_git_branches(raw);
+        let compact = compact_git_branches(raw, 20, 10);
         assert!(compact.contains("branches: 2 local, 3 remote"));
         assert!(compact.contains("* main"));
         assert!(compact.contains("feature/auth"));
@@ -942,7 +1000,7 @@ diff --git a/b.rs b/b.rs
         for i in 0..40 {
             raw.push_str(&format!("  branch-{i:03}\n"));
         }
-        let compact = compact_git_branches(&raw);
+        let compact = compact_git_branches(&raw, 20, 10);
         assert!(compact.contains("branches: 41 local"));
         assert!(compact.contains("* current"));
         // Only first 20 non-current branches shown
@@ -971,7 +1029,7 @@ diff --git a/src/main.rs b/src/main.rs
 +    new();
  }
 ";
-        let compact = compact_git_show(raw);
+        let compact = compact_git_show(raw, 15, 200);
         assert!(compact.contains("commit abc1234"));
         assert!(compact.contains("Fix the thing"));
         assert!(compact.contains("src/main.rs | +1 -1"));
@@ -981,7 +1039,7 @@ diff --git a/src/main.rs b/src/main.rs
     #[test]
     fn show_without_diff() {
         let raw = "commit abc1234\nAuthor: Test\n\n    Message\n";
-        let compact = compact_git_show(raw);
+        let compact = compact_git_show(raw, 15, 200);
         assert!(compact.contains("commit abc1234"));
         assert!(compact.contains("Message"));
     }
@@ -1061,7 +1119,7 @@ diff --git a/src/main.rs b/src/main.rs
     #[test]
     fn filter_log_truncates_long_lines() {
         let long = format!("abc1234 {}", "x".repeat(200));
-        let result = filter_log_output(&long, 10);
+        let result = filter_log_output(&long, 10, 120);
         assert!(result.len() < long.len());
         assert!(result.ends_with("..."));
     }
@@ -1072,7 +1130,7 @@ diff --git a/src/main.rs b/src/main.rs
             .map(|i| format!("hash{i} message {i}"))
             .collect::<Vec<_>>()
             .join("\n");
-        let result = filter_log_output(&lines, 5);
+        let result = filter_log_output(&lines, 5, 120);
         assert_eq!(result.lines().count(), 5);
     }
 

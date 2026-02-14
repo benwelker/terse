@@ -30,6 +30,7 @@ pub struct TerseConfig {
     pub passthrough: PassthroughConfig,
     pub logging: LoggingConfig,
     pub whitespace: WhitespaceConfig,
+    pub optimizers: OptimizersConfig,
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +385,181 @@ impl Default for WhitespaceConfig {
 }
 
 // ---------------------------------------------------------------------------
+// [optimizers] — per-optimizer configurable limits
+// ---------------------------------------------------------------------------
+
+/// Per-optimizer limit configurations.
+///
+/// Each sub-section controls the truncation and filtering limits for a
+/// specific optimizer. These limits determine how aggressively output is
+/// compacted. All values have sensible built-in defaults.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OptimizersConfig {
+    pub git: GitOptimizerConfig,
+    pub file: FileOptimizerConfig,
+    pub build: BuildOptimizerConfig,
+    pub docker: DockerOptimizerConfig,
+    pub generic: GenericOptimizerConfig,
+}
+
+/// Git optimizer limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GitOptimizerConfig {
+    /// Maximum log entries to display when user has custom format/limit.
+    pub log_max_entries: usize,
+    /// Default `-n` limit added when user omits it.
+    pub log_default_limit: usize,
+    /// Maximum character width for log lines before truncation.
+    pub log_line_max_chars: usize,
+    /// Maximum changed lines per diff hunk before truncation.
+    pub diff_max_hunk_lines: usize,
+    /// Maximum total diff lines before the entire diff is truncated.
+    pub diff_max_total_lines: usize,
+    /// Maximum local branches shown.
+    pub branch_max_local: usize,
+    /// Maximum remote-only branches shown.
+    pub branch_max_remote: usize,
+}
+
+impl Default for GitOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            log_max_entries: 50,
+            log_default_limit: 20,
+            log_line_max_chars: 120,
+            diff_max_hunk_lines: 15,
+            diff_max_total_lines: 200,
+            branch_max_local: 20,
+            branch_max_remote: 10,
+        }
+    }
+}
+
+/// File optimizer limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileOptimizerConfig {
+    /// Maximum entries for long-format `ls -l` output.
+    pub ls_max_entries: usize,
+    /// Maximum items for simple `ls` output.
+    pub ls_max_items: usize,
+    /// Maximum results for `find` output.
+    pub find_max_results: usize,
+    /// Maximum total lines for `cat`/`head`/`tail` output.
+    pub cat_max_lines: usize,
+    /// Lines to keep from the head of `cat` output when truncating.
+    pub cat_head_lines: usize,
+    /// Lines to keep from the tail of `cat` output when truncating.
+    pub cat_tail_lines: usize,
+    /// Maximum lines for `wc` output.
+    pub wc_max_lines: usize,
+    /// Maximum lines for `tree` output.
+    pub tree_max_lines: usize,
+}
+
+impl Default for FileOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            ls_max_entries: 50,
+            ls_max_items: 60,
+            find_max_results: 40,
+            cat_max_lines: 100,
+            cat_head_lines: 60,
+            cat_tail_lines: 30,
+            wc_max_lines: 30,
+            tree_max_lines: 60,
+        }
+    }
+}
+
+/// Build/test/lint optimizer limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BuildOptimizerConfig {
+    /// Maximum failure detail lines in test output.
+    pub test_max_failure_lines: usize,
+    /// Maximum error lines in test output.
+    pub test_max_error_lines: usize,
+    /// Maximum warnings shown in test output.
+    pub test_max_warnings: usize,
+    /// Maximum error lines in build output.
+    pub build_max_error_lines: usize,
+    /// Maximum warnings shown in build output.
+    pub build_max_warnings: usize,
+    /// Maximum issue lines in lint output.
+    pub lint_max_issue_lines: usize,
+}
+
+impl Default for BuildOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            test_max_failure_lines: 80,
+            test_max_error_lines: 40,
+            test_max_warnings: 10,
+            build_max_error_lines: 60,
+            build_max_warnings: 10,
+            lint_max_issue_lines: 80,
+        }
+    }
+}
+
+/// Docker optimizer limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DockerOptimizerConfig {
+    /// Maximum rows for `docker ps` output.
+    pub ps_max_rows: usize,
+    /// Maximum rows for `docker images` output.
+    pub images_max_rows: usize,
+    /// Maximum tail lines for `docker logs`.
+    pub logs_max_tail: usize,
+    /// Maximum error lines extracted from `docker logs`.
+    pub logs_max_errors: usize,
+    /// Maximum lines for `docker inspect` output.
+    pub inspect_max_lines: usize,
+    /// Maximum rows for `docker compose ps` output.
+    pub compose_max_rows: usize,
+    /// Maximum rows for `docker network/volume ls`.
+    pub resource_max_rows: usize,
+}
+
+impl Default for DockerOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            ps_max_rows: 30,
+            images_max_rows: 30,
+            logs_max_tail: 30,
+            logs_max_errors: 20,
+            inspect_max_lines: 60,
+            compose_max_rows: 30,
+            resource_max_rows: 30,
+        }
+    }
+}
+
+/// Generic (fallback) optimizer limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GenericOptimizerConfig {
+    /// Minimum raw output size (bytes) before optimization kicks in.
+    /// Outputs smaller than this are passed through unchanged.
+    pub min_size_bytes: usize,
+    /// Maximum lines to keep in the output (head/tail preserved).
+    pub max_lines: usize,
+}
+
+impl Default for GenericOptimizerConfig {
+    fn default() -> Self {
+        Self {
+            min_size_bytes: 512,
+            max_lines: 200,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Profile application
 // ---------------------------------------------------------------------------
 
@@ -495,6 +671,46 @@ enabled = true
 max_consecutive_newlines = 2
 normalize_tabs = true
 trim_trailing = true
+
+[optimizers.git]
+log_max_entries = 50
+log_default_limit = 20
+log_line_max_chars = 120
+diff_max_hunk_lines = 15
+diff_max_total_lines = 200
+branch_max_local = 20
+branch_max_remote = 10
+
+[optimizers.file]
+ls_max_entries = 50
+ls_max_items = 60
+find_max_results = 40
+cat_max_lines = 100
+cat_head_lines = 60
+cat_tail_lines = 30
+wc_max_lines = 30
+tree_max_lines = 60
+
+[optimizers.build]
+test_max_failure_lines = 80
+test_max_error_lines = 40
+test_max_warnings = 10
+build_max_error_lines = 60
+build_max_warnings = 10
+lint_max_issue_lines = 80
+
+[optimizers.docker]
+ps_max_rows = 30
+images_max_rows = 30
+logs_max_tail = 30
+logs_max_errors = 20
+inspect_max_lines = 60
+compose_max_rows = 30
+resource_max_rows = 30
+
+[optimizers.generic]
+min_size_bytes = 512                  # Outputs below this size skip generic cleanup
+max_lines = 200                       # Maximum lines before head/tail truncation
 "#
         .to_string()
     }
