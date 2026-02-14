@@ -1,4 +1,4 @@
-//! Embedded HTML/CSS/JS frontend for the TERSE web dashboard.
+//! Embedded HTML/CSS/JS frontend for the terse web dashboard.
 //!
 //! The entire SPA is compiled into the binary as a string constant.
 //! No external assets, no build tools, no CDN dependencies.
@@ -9,7 +9,7 @@ pub const INDEX_HTML: &str = r##"<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TERSE Dashboard</title>
+<title>terse Dashboard</title>
 <style>
 :root {
   --bg: #0d1117;
@@ -494,7 +494,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <!-- Header -->
   <header>
     <div>
-      <h1><span class="logo">&gt;_ TERSE</span> Dashboard</h1>
+      <h1><span class="logo">&gt;_ terse</span> Dashboard</h1>
       <div class="subtitle">Token Efficiency through Refined Stream Engineering</div>
     </div>
     <div class="health-badges" id="health-badges"></div>
@@ -544,7 +544,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
       </table>
       <div class="empty" id="commands-empty" style="display:none">
         <div class="icon">📊</div>
-        <p>No command data yet. Run some commands through TERSE to see analytics here.</p>
+        <p>No command data yet. Run some commands through terse to see analytics here.</p>
       </div>
     </div>
   </div>
@@ -556,7 +556,7 @@ tr:hover { background: rgba(255,255,255,0.02); }
       <div class="chart" id="trend-chart"></div>
       <div class="empty" id="trends-empty" style="display:none">
         <div class="icon">📈</div>
-        <p>No trend data available yet. Analytics accumulate as you use TERSE with Claude Code.</p>
+        <p>No trend data available yet. Analytics accumulate as you use terse with Claude Code.</p>
       </div>
     </div>
 

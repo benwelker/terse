@@ -1,4 +1,4 @@
-# TERSE — Release Builds
+# terse — Release Builds
 #
 # Triggered on version tag push (v*).
 # Cross-compiles release binaries for Windows, macOS (Intel + ARM), and Linux.

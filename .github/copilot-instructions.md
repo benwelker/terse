@@ -1,6 +1,6 @@
-# TERSE — AI Agent Instructions
+# terse — AI Agent Instructions
 
-TERSE (Token Efficiency through Refined Stream Engineering) is a single Rust binary that intercepts AI coding assistant commands via hooks, optimizes outputs through a dual-path system (fast rule-based + LLM via Ollama), and reduces token consumption by 60–80%.
+terse (Token Efficiency through Refined Stream Engineering) is a single Rust binary that intercepts AI coding assistant commands via hooks, optimizes outputs through a dual-path system (fast rule-based + LLM via Ollama), and reduces token consumption by 60–80%.
 
 ## Architecture
 
@@ -60,7 +60,7 @@ pub trait Optimizer {
 }
 ```
 
-Register new optimizers in `OptimizerRegistry::from_config()`. TERSE optimizers are output post-processors (router executes original command first, optimizer transforms output). See `src/optimizers/git.rs` for the reference implementation.
+Register new optimizers in `OptimizerRegistry::from_config()`. terse optimizers are output post-processors (router executes original command first, optimizer transforms output). See `src/optimizers/git.rs` for the reference implementation.
 
 **CommandContext pattern** — `extract_core_command()` runs once, producing a `CommandContext` with `original` (full command) and `core` (extracted for matching). All optimizers receive this pre-extracted context.
 

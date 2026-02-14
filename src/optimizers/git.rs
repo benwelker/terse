@@ -9,7 +9,7 @@ use crate::utils::token_counter::estimate_tokens;
 // Subcommand classification
 // ---------------------------------------------------------------------------
 
-/// Recognized git subcommands that TERSE can optimize.
+/// Recognized git subcommands that terse can optimize.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GitSubcommand {
     Status,

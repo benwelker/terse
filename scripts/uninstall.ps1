@@ -1,4 +1,4 @@
-# TERSE Uninstall Script for Windows
+# terse Uninstall Script for Windows
 # Usage: .\uninstall.ps1
 #    or: .\uninstall.ps1 -KeepData
 #
@@ -52,7 +52,7 @@ function Write-Err {
 # Confirmation
 # ---------------------------------------------------------------------------
 
-Write-Step "Uninstalling TERSE (Token Efficiency through Refined Stream Engineering)"
+Write-Step "Uninstalling terse (Token Efficiency through Refined Stream Engineering)"
 Write-Host ""
 
 if (-not $Force) {
@@ -181,7 +181,7 @@ if ($KeepData) {
         Remove-Item -Recurse -Force $TERSE_HOME
         Write-Ok "Removed $TERSE_HOME"
     } else {
-        Write-Ok "TERSE home directory not found (already removed)"
+        Write-Ok "terse home directory not found (already removed)"
     }
 }
 

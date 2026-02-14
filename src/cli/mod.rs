@@ -1,4 +1,4 @@
-//! CLI command implementations for TERSE analytics and diagnostics.
+//! CLI command implementations for terse analytics and diagnostics.
 //!
 //! Provides subcommand handlers for:
 //! - `terse stats` — token savings summary, path distribution, top commands
@@ -64,7 +64,7 @@ pub fn run_stats(format: OutputFormat, days: Option<u32>) -> Result<()> {
 }
 
 fn print_stats_table(stats: &Stats) {
-    println!("{}", "TERSE Token Savings Report".bold().cyan());
+    println!("{}", "terse Token Savings Report".bold().cyan());
     println!("{}", "=".repeat(60));
     println!();
 
@@ -191,7 +191,7 @@ pub fn run_analyze(days: u32, format: OutputFormat) -> Result<()> {
 fn print_trends_table(trends: &[TrendEntry], days: u32) {
     println!(
         "{}",
-        format!("TERSE Trends — Last {} Days", days).bold().cyan()
+        format!("terse Trends — Last {} Days", days).bold().cyan()
     );
     println!("{}", "=".repeat(50));
     println!(
@@ -328,7 +328,7 @@ fn print_discover_csv(candidates: &[DiscoveryCandidate]) {
 
 /// Check system health: Ollama, config, circuit breaker, log file.
 pub fn run_health() -> Result<()> {
-    println!("{}", "TERSE Health Check".bold().cyan());
+    println!("{}", "terse Health Check".bold().cyan());
     println!("{}", "=".repeat(40));
 
     // Platform info
@@ -515,7 +515,7 @@ fn print_health_item(name: &str, ok: bool, detail: &str) {
 /// Show the effective (merged) configuration as TOML.
 pub fn run_config_show() -> Result<()> {
     let toml_str = config::show_effective_config()?;
-    println!("{}", "Effective TERSE Configuration".bold().cyan());
+    println!("{}", "Effective terse Configuration".bold().cyan());
     println!("{}", "=".repeat(50));
     println!();
     println!("{toml_str}");
@@ -562,7 +562,7 @@ pub fn run_config_init(force: bool) -> Result<()> {
     );
     println!(
         "  {}",
-        "Edit the file to customize TERSE behavior.".dimmed()
+        "Edit the file to customize terse behavior.".dimmed()
     );
 
     if let Ok(exe_path) = std::env::current_exe()
@@ -572,7 +572,7 @@ pub fn run_config_init(force: bool) -> Result<()> {
         println!("{}", "Quick PATH setup (optional)".bold().cyan());
         println!(
             "  {} {}",
-            "Detected TERSE binary directory:".dimmed(),
+            "Detected terse binary directory:".dimmed(),
             bin_dir.display()
         );
 
@@ -628,7 +628,7 @@ pub fn run_config_reset() -> Result<()> {
 pub fn run_test(command: &str) -> Result<()> {
     let preview = router::preview(command)?;
 
-    println!("{}", "TERSE Optimization Preview".bold().cyan());
+    println!("{}", "terse Optimization Preview".bold().cyan());
     println!("{}", "=".repeat(50));
     println!("  {} {}", "Command:      ".bold(), command);
     println!("  {} {}", "Hook decision:".bold(), preview.hook_decision);

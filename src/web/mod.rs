@@ -1,4 +1,4 @@
-//! Embedded web dashboard for TERSE.
+//! Embedded web dashboard for terse.
 //!
 //! Provides a lightweight HTTP server (sync, via `tiny_http`) that serves:
 //! - A single-page analytics dashboard with configuration editor
@@ -27,7 +27,7 @@ pub fn serve(addr: &str) -> Result<()> {
     let server = Server::http(addr)
         .map_err(|e| anyhow::anyhow!("failed to start HTTP server on {addr}: {e}"))?;
 
-    println!("TERSE dashboard running at http://{addr}");
+    println!("terse dashboard running at http://{addr}");
     println!("Press Ctrl+C to stop.\n");
 
     // Try to open in default browser (best-effort)

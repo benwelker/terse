@@ -1,4 +1,4 @@
-/// Router — central decision engine for TERSE's optimization pipeline.
+/// Router — central decision engine for terse's optimization pipeline.
 ///
 /// The router provides two entry points:
 ///

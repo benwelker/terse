@@ -1,4 +1,4 @@
-# TERSE — Continuous Integration
+# terse — Continuous Integration
 #
 # Runs on every push and pull request to master.
 # Matrix build across Windows, macOS, and Linux.

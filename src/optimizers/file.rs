@@ -8,7 +8,7 @@ use crate::utils::token_counter::estimate_tokens;
 // Subcommand classification
 // ---------------------------------------------------------------------------
 
-/// Recognized file commands that TERSE can optimize.
+/// Recognized file commands that terse can optimize.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FileCommand {
     /// ls / dir — directory listing

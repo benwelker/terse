@@ -1,10 +1,10 @@
 # Adding a New Optimizer
 
-This guide walks through creating a new command optimizer for TERSE. Optimizers intercept specific shell commands and compact their output to reduce token consumption in AI coding sessions.
+This guide walks through creating a new command optimizer for terse. Optimizers intercept specific shell commands and compact their output to reduce token consumption in AI coding sessions.
 
 ## Architecture Overview
 
-TERSE uses a **registry-based optimizer pattern**:
+terse uses a **registry-based optimizer pattern**:
 
 1. The **router** executes the original command and captures raw output.
 2. The **`OptimizerRegistry`** iterates through registered optimizers in priority order.

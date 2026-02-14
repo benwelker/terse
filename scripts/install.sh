@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TERSE Installation Script for macOS and Linux
+# terse Installation Script for macOS and Linux
 # Usage: curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/install.sh | bash
 #    or: ./install.sh
 #
@@ -32,7 +32,7 @@ err()   { printf '  \033[31m✗\033[0m %s\n' "$1"; }
 # Step 1: Detect platform & determine download target
 # ---------------------------------------------------------------------------
 
-step "Installing TERSE (Token Efficiency through Refined Stream Engineering)"
+step "Installing terse (Token Efficiency through Refined Stream Engineering)"
 echo ""
 
 OS="$(uname -s)"
@@ -167,7 +167,7 @@ else
         ok "PATH entry already in $PROFILE"
     else
         echo "" >> "$PROFILE"
-        echo "# TERSE - Token Efficiency through Refined Stream Engineering" >> "$PROFILE"
+        echo "# terse - Token Efficiency through Refined Stream Engineering" >> "$PROFILE"
         echo "$EXPORT_LINE" >> "$PROFILE"
         ok "Added $BIN_DIR to $PROFILE"
         warn "Restart your terminal or run: source $PROFILE"
@@ -213,7 +213,7 @@ if command -v ollama &>/dev/null; then
 else
     warn "Ollama not found. Smart Path will be disabled."
     warn "Install Ollama from https://ollama.com for LLM-powered optimization."
-    warn "TERSE works fine without it — rule-based optimizers are always available."
+    warn "terse works fine without it — rule-based optimizers are always available."
 fi
 
 # ---------------------------------------------------------------------------

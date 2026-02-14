@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TERSE Uninstall Script for macOS and Linux
+# terse Uninstall Script for macOS and Linux
 # Usage: curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/uninstall.sh | bash
 #    or: ./uninstall.sh
 #    or: ./uninstall.sh --keep-data
@@ -56,7 +56,7 @@ err()   { printf '  \033[31m✗\033[0m %s\n' "$1"; }
 # Confirmation
 # ---------------------------------------------------------------------------
 
-step "Uninstalling TERSE (Token Efficiency through Refined Stream Engineering)"
+step "Uninstalling terse (Token Efficiency through Refined Stream Engineering)"
 echo ""
 
 if [ "$KEEP_DATA" = true ]; then
@@ -169,13 +169,13 @@ if [ -f "$PROFILE" ] && grep -q "$BIN_DIR" "$PROFILE" 2>/dev/null; then
     # Create a backup before modifying
     cp "$PROFILE" "$PROFILE.terse-backup"
 
-    # Remove the TERSE comment line and the export/set line
+    # Remove the terse comment line and the export/set line
     if [ "$(uname -s)" = "Darwin" ]; then
         # macOS sed requires '' for in-place with no backup
-        sed -i '' "/# TERSE - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
+        sed -i '' "/# terse - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
         sed -i '' "\|$BIN_DIR|d" "$PROFILE"
     else
-        sed -i "/# TERSE - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
+        sed -i "/# terse - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
         sed -i "\|$BIN_DIR|d" "$PROFILE"
     fi
 
@@ -206,10 +206,10 @@ for alt_profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_
     if grep -q "$BIN_DIR" "$alt_profile" 2>/dev/null; then
         cp "$alt_profile" "$alt_profile.terse-backup"
         if [ "$(uname -s)" = "Darwin" ]; then
-            sed -i '' "/# TERSE - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
+            sed -i '' "/# terse - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
             sed -i '' "\|$BIN_DIR|d" "$alt_profile"
         else
-            sed -i "/# TERSE - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
+            sed -i "/# terse - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
             sed -i "\|$BIN_DIR|d" "$alt_profile"
         fi
         ok "Also removed PATH entry from $alt_profile"
@@ -248,7 +248,7 @@ else
         rm -rf "$TERSE_HOME"
         ok "Removed $TERSE_HOME"
     else
-        ok "TERSE home directory not found (already removed)"
+        ok "terse home directory not found (already removed)"
     fi
 fi
 

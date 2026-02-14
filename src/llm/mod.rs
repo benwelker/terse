@@ -1,6 +1,6 @@
 /// LLM Smart Path — local LLM optimization via Ollama HTTP API.
 ///
-/// This module provides the second optimization path in TERSE's dual-path
+/// This module provides the second optimization path in terse's dual-path
 /// architecture. When no rule-based optimizer can handle a command, the smart
 /// path sends the raw output to a local Ollama instance for intelligent
 /// condensation.
@@ -21,7 +21,7 @@
 ///
 /// 1. **Hook level** (`terse hook`): if the smart path is enabled and Ollama
 ///    is healthy, the hook rewrites unoptimized commands to `terse run` so
-///    they are routed through TERSE even without a rule-based optimizer.
+///    they are routed through terse even without a rule-based optimizer.
 ///
 /// 2. **Run level** (`terse run`): after executing the command and capturing
 ///    output, if the output exceeds the byte-size threshold (see router

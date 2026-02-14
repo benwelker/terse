@@ -1,4 +1,4 @@
-/// Configuration schema and defaults for the entire TERSE system.
+/// Configuration schema and defaults for the entire terse system.
 ///
 /// Defines the TOML-serializable configuration structure with all sections:
 /// `[general]`, `[fast_path]`, `[smart_path]`, `[output_thresholds]`,
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // Top-level config
 // ---------------------------------------------------------------------------
 
-/// Top-level TERSE configuration.
+/// Top-level terse configuration.
 ///
 /// Maps directly to the `~/.terse/config.toml` and `.terse.toml` file
 /// schemas. All sections and fields are optional — missing values fall back
@@ -37,7 +37,7 @@ pub struct TerseConfig {
 // [general]
 // ---------------------------------------------------------------------------
 
-/// Operation mode for TERSE.
+/// Operation mode for terse.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Mode {
@@ -86,7 +86,7 @@ impl std::fmt::Display for Profile {
     }
 }
 
-/// General TERSE settings.
+/// General terse settings.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GeneralConfig {
@@ -661,7 +661,7 @@ impl TerseConfig {
     /// Used by `terse config init` to create a starting config file with
     /// all settings documented.
     pub fn default_toml() -> String {
-        r#"# TERSE Configuration
+        r#"# terse Configuration
 # Token Efficiency through Refined Stream Engineering
 #
 # Configuration hierarchy (highest precedence wins):

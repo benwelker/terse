@@ -1,4 +1,4 @@
-# TERSE — Unified Implementation Plan
+# terse — Unified Implementation Plan
 
 ## Token Efficiency through Refined Stream Engineering
 
@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-**Name:** TERSE (Token Efficiency through Refined Stream Engineering)
+**Name:** terse (Token Efficiency through Refined Stream Engineering)
 
 **Purpose:** Single Rust binary that intercepts AI coding assistant commands, optimizes outputs via fast rule-based optimizers AND a local LLM smart path (Ollama HTTP API), and reduces token consumption by 60–80%.
 
@@ -50,7 +50,7 @@
 > **Protocol note (critical):** Claude Code hooks use the `hookSpecificOutput` protocol.
 > A PreToolUse hook **cannot** block-and-substitute (i.e., run the command itself and return
 > the output). Instead, it can **rewrite** the command via `updatedInput`, and Claude Code
-> then executes the rewritten command. TERSE uses this to rewrite commands to
+> then executes the rewritten command. terse uses this to rewrite commands to
 > `terse run "original_command"`, so Claude Code executes `terse run` which does the
 > optimization internally and prints the optimized output to stdout.
 
@@ -305,7 +305,7 @@ terse/
 
 A naive `command.starts_with("git")` check misses all of these. The existing `normalized_git_command()` in `git.rs` handles the `cd ... &&` pattern, but a unified, extensible matching engine is needed as more optimizers are added.
 
-**Reference:** [RTK-AI's rtk-rewrite.sh](https://github.com/rtk-ai/rtk/blob/master/hooks/rtk-rewrite.sh) solves this in a 200+ line shell script using `jq`, `grep -qE`, and `sed` chains with many elif branches. TERSE handles this directly in Rust for better performance, type safety, single-binary distribution, and no dependency on external tools.
+**Reference:** [RTK-AI's rtk-rewrite.sh](https://github.com/rtk-ai/rtk/blob/master/hooks/rtk-rewrite.sh) solves this in a 200+ line shell script using `jq`, `grep -qE`, and `sed` chains with many elif branches. terse handles this directly in Rust for better performance, type safety, single-binary distribution, and no dependency on external tools.
 
 **Rust concepts introduced:** String processing, iterators, `Option` chaining, regex (optional).
 
@@ -452,7 +452,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
 
 ### Phase 5: Analytics & CLI (Week 5–6) ✅ COMPLETE
 
-**Goal:** Data-driven visibility into what TERSE is doing and where to optimize next.
+**Goal:** Data-driven visibility into what terse is doing and where to optimize next.
 
 **Rust concepts introduced:** `HashMap`/`BTreeMap`, iterators, functional chaining, formatted output, `colored` crate.
 
@@ -788,7 +788,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10) ⏭️ NEXT
 
-**Goal:** Bulletproof error handling — TERSE never breaks a Claude Code session.
+**Goal:** Bulletproof error handling — terse never breaks a Claude Code session.
 
 **Rust concepts introduced:** Custom error types with `thiserror` crate, `Drop` trait for cleanup, structured error hierarchies.
 
@@ -1053,7 +1053,7 @@ path = "src/main.rs"
 | **Single Rust binary**                         | One artifact to distribute, Ollama HTTP API callable from Rust directly, no additional runtime dependencies |
 | **TOML config** (not JSON)                     | Human-friendly, supports comments, standard in Rust ecosystem                                               |
 | **Git optimizer first** (not analytics-first)  | Delivers measurable value immediately; analytics added Phase 5 to guide subsequent priorities               |
-| **LLM as core feature**                        | Universal command coverage from Phase 3 onward — TERSE handles _any_ command                                |
+| **LLM as core feature**                        | Universal command coverage from Phase 3 onward — terse handles _any_ command                                |
 | **`ureq` sync HTTP** (not `reqwest` async)     | Simpler for beginner Rust, hook is inherently synchronous (stdin→stdout), no async runtime needed           |
 | **Circuit breaker per path** (not global)      | If LLM is down, fast path still works; if optimizer has bug, LLM fallback still works                       |
 | **Whitespace optimizer as post-processing**    | Applied after both fast and smart paths for consistent additional savings                                   |

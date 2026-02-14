@@ -8,7 +8,7 @@ use crate::utils::token_counter::estimate_tokens;
 // Subcommand classification
 // ---------------------------------------------------------------------------
 
-/// Recognized build/test tool commands that TERSE can optimize.
+/// Recognized build/test tool commands that terse can optimize.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BuildCommand {
     /// cargo test / npm test / dotnet test / pytest / go test

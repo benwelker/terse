@@ -1,4 +1,4 @@
-/// Configuration system for TERSE.
+/// Configuration system for terse.
 ///
 /// Provides a layered configuration hierarchy:
 ///
@@ -42,7 +42,7 @@ pub use schema::TerseConfig;
 // Config loading
 // ---------------------------------------------------------------------------
 
-/// Load the fully resolved TERSE configuration.
+/// Load the fully resolved terse configuration.
 ///
 /// Merges all layers in order: defaults → global TOML → project TOML → env
 /// vars → profile application. This is the primary entry point for all

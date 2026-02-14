@@ -68,7 +68,7 @@ enum Commands {
         #[arg(trailing_var_arg = true, required = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
-    /// Manage TERSE configuration
+    /// Manage terse configuration
     Config {
         #[command(subcommand)]
         action: ConfigAction,

@@ -1,4 +1,4 @@
-# TERSE Installation Script for Windows
+# terse Installation Script for Windows
 # Usage: irm https://raw.githubusercontent.com/benwelker/terse/master/install.ps1 | iex
 #    or: .\install.ps1
 #
@@ -49,7 +49,7 @@ function Write-Err {
 # Step 1: Detect platform & determine download URL
 # ---------------------------------------------------------------------------
 
-Write-Step "Installing TERSE (Token Efficiency through Refined Stream Engineering)"
+Write-Step "Installing terse (Token Efficiency through Refined Stream Engineering)"
 Write-Host ""
 
 # Detect architecture
@@ -58,7 +58,7 @@ if ($arch -eq "X64") {
     $target = "terse-windows-x86_64"
 } else {
     Write-Err "Unsupported architecture: $arch"
-    Write-Err "TERSE currently supports x86_64 on Windows."
+    Write-Err "terse currently supports x86_64 on Windows."
     exit 1
 }
 
@@ -172,7 +172,7 @@ if (Get-Command ollama -ErrorAction SilentlyContinue) {
 } else {
     Write-Warn "Ollama not found. Smart Path will be disabled."
     Write-Warn "Install Ollama from https://ollama.com for LLM-powered optimization."
-    Write-Warn "TERSE works fine without it — rule-based optimizers are always available."
+    Write-Warn "terse works fine without it — rule-based optimizers are always available."
 }
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 /// Destructive commands (rm, mv) and interactive editors (vim, code) are never
 /// optimized. Commands with file output redirections (`>`, `>>`) are also
 /// passed through since the redirect consumes stdout and there is nothing
-/// useful for TERSE to capture.
+/// useful for terse to capture.
 ///
 /// The classifier examines both the **core command** (extracted by the
 /// matching engine) for command-name checks, and the **full original command**
