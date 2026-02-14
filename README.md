@@ -35,7 +35,7 @@ terse is a Rust CLI that intercepts shell commands from Claude Code hooks, runs 
 - [Configuration](#configuration)
 - [Runtime files](#runtime-files)
 - [Development](#development)
-- [Web dashboard](#web-dashboard-1)
+- [Web dashboard details](#web-dashboard-details)
 - [Status](#status)
 
 ## Installation
@@ -122,30 +122,35 @@ untracked (1): notes.txt
 
 - Rewrites safe `Bash` tool commands to `terse run "<original command>"` via Claude PreToolUse hook protocol
 - Routes output through:
-  - **Fast path** (rule-based optimizer, currently Git-focused)
+  - **Fast path** (rule-based optimizers: `git`, `file`, `build`, `docker`, `generic`)
   - **Smart path** (local LLM via Ollama, opt-in)
   - **Passthrough** (for unsafe/small/unoptimizable cases)
-- Applies a preprocessing pipeline (noise removal, path filtering, dedup, truncation, whitespace normalization)
+- Applies a deterministic preprocessing pipeline before path selection:
+  - **Noise removal** (ANSI/progress/spinner/boilerplate cleanup)
+  - **Path filtering** (collapses verbose dependency/build paths)
+  - **Deduplication** (collapses repeated lines)
+  - **Truncation** (head/tail preserve when still oversized)
+  - **Whitespace normalization** (trim + blank-line cleanup)
 - Logs analytics and events for stats/trends/discovery
 
 ## Current implemented scope
 
 ### Fast path optimizers
 
-Currently implemented optimizer module:
+Currently implemented fast-path optimizers:
 
-- `git` (single optimizer with subcommand-specific handling)
+- `git` — Git porcelain/history/diff/worktree compaction
+- `file` — file/listing/content command compaction
+- `build` — test/build/lint output summarization
+- `docker` — container/image/log/build output compaction
+- `generic` — fallback whitespace + line-cap compaction
 
-Supported Git command families:
+Supported command families include:
 
-- `git status`
-- `git log`
-- `git diff`
-- `git branch`
-- `git show`
-- `git stash`
-- `git worktree`
-- short operation summaries for `git push|pull|fetch|add|commit`
+- **Git:** `git status`, `git log`, `git diff`, `git branch`, `git show`, `git stash`, `git worktree`, short summaries for `git push|pull|fetch|add|commit`
+- **File/system:** `ls|dir|Get-ChildItem`, `find`, `cat|head|tail|type|Get-Content`, `wc`, `tree`
+- **Build/test/lint:** `cargo|npm|yarn|pnpm|dotnet|go|maven|gradle|make|cmake|msbuild|pip` build/test/lint families
+- **Docker:** `docker ps`, `docker images`, `docker logs`, `docker inspect`, `docker build`, `docker pull|push`, `docker compose ps|build`, `docker network|volume ls`
 
 ### Smart path
 
@@ -169,7 +174,7 @@ Never optimized:
    - returns `{}` (passthrough), or
    - rewrites command to `terse run "..."`
 3. `terse run` executes original command
-4. Router preprocesses output and selects path based on config + output size
+4. Router preprocesses output (noise removal, path filtering, dedup, truncation, whitespace normalization) and selects path based on config + output size
 5. Optimized output is printed to stdout and logged
 
 ## Hook setup (manual / from-source builds)
@@ -317,7 +322,7 @@ Live LLM integration tests (requires Ollama running):
 TERSE_TEST_LLM=1 cargo test llm_live
 ```
 
-## Web dashboard
+## Web dashboard details
 
 terse ships with a built-in web dashboard — a single-page app compiled into the binary with zero external dependencies.
 
@@ -340,4 +345,4 @@ This repository is an actively evolving implementation. The long-range roadmap a
 
 - `.claude/plans/terse-FINAL-Plan.md`
 
-Current codebase already includes hook integration, router, preprocessing pipeline, Git optimizer, LLM smart path integration, analytics commands, TOML-based configuration management, web dashboard, cross-platform support, and CI/CD workflows.
+Current codebase already includes hook integration, router, preprocessing pipeline, fast-path optimizers (`git`, `file`, `build`, `docker`, `generic`), LLM smart path integration, analytics commands, TOML-based configuration management, web dashboard, cross-platform support, and CI/CD workflows.
