@@ -3,7 +3,7 @@
 **🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
 
 [![Rust Edition](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
-[![CI](https://img.shields.io/github/actions/workflow/status/benwelker/terse/ci.yml?branch=main&label=CI&logo=github)](https://github.com/benwelker/terse/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/benwelker/terse/ci.yml?branch=master&label=CI&logo=github)](https://github.com/benwelker/terse/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/benwelker/terse/release.yml?label=Release&logo=github)](https://github.com/benwelker/terse/actions/workflows/release.yml)
 [![Version](https://img.shields.io/github/v/release/benwelker/terse?label=version)](https://github.com/benwelker/terse/releases)
 [![CLI](https://img.shields.io/badge/type-CLI-informational)](#cli-usage)
