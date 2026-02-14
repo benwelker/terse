@@ -32,7 +32,7 @@ err()   { printf '  \033[31m✗\033[0m %s\n' "$1"; }
 # Step 1: Detect platform & determine download target
 # ---------------------------------------------------------------------------
 
-step "Installing terse (Token Efficiency through Refined Stream Engineering)"
+step "Installing terse"
 echo ""
 
 OS="$(uname -s)"
@@ -167,7 +167,7 @@ else
         ok "PATH entry already in $PROFILE"
     else
         echo "" >> "$PROFILE"
-        echo "# terse - Token Efficiency through Refined Stream Engineering" >> "$PROFILE"
+        echo "# terse" >> "$PROFILE"
         echo "$EXPORT_LINE" >> "$PROFILE"
         ok "Added $BIN_DIR to $PROFILE"
         warn "Restart your terminal or run: source $PROFILE"

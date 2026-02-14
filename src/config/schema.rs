@@ -662,8 +662,6 @@ impl TerseConfig {
     /// all settings documented.
     pub fn default_toml() -> String {
         r#"# terse Configuration
-# Token Efficiency through Refined Stream Engineering
-#
 # Configuration hierarchy (highest precedence wins):
 #   1. Environment variables (TERSE_*)
 #   2. Project config (.terse.toml in current directory)

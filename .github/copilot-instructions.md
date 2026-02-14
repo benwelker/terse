@@ -1,6 +1,6 @@
 # terse — AI Agent Instructions
 
-terse (Token Efficiency through Refined Stream Engineering) is a single Rust binary that intercepts AI coding assistant commands via hooks, optimizes outputs through a dual-path system (fast rule-based + LLM via Ollama), and reduces token consumption by 60–80%.
+terse is a single Rust binary that intercepts AI coding assistant commands via hooks, optimizes outputs through a dual-path system (fast rule-based + LLM via Ollama), and reduces token consumption by 60–80%.
 
 ## Architecture
 

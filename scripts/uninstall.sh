@@ -56,7 +56,7 @@ err()   { printf '  \033[31m✗\033[0m %s\n' "$1"; }
 # Confirmation
 # ---------------------------------------------------------------------------
 
-step "Uninstalling terse (Token Efficiency through Refined Stream Engineering)"
+step "Uninstalling terse"
 echo ""
 
 if [ "$KEEP_DATA" = true ]; then
@@ -172,10 +172,10 @@ if [ -f "$PROFILE" ] && grep -q "$BIN_DIR" "$PROFILE" 2>/dev/null; then
     # Remove the terse comment line and the export/set line
     if [ "$(uname -s)" = "Darwin" ]; then
         # macOS sed requires '' for in-place with no backup
-        sed -i '' "/# terse - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
+        sed -i '' "/# terse/d" "$PROFILE"
         sed -i '' "\|$BIN_DIR|d" "$PROFILE"
     else
-        sed -i "/# terse - Token Efficiency through Refined Stream Engineering/d" "$PROFILE"
+        sed -i "/# terse/d" "$PROFILE"
         sed -i "\|$BIN_DIR|d" "$PROFILE"
     fi
 
@@ -206,10 +206,10 @@ for alt_profile in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile" "$HOME/.bash_
     if grep -q "$BIN_DIR" "$alt_profile" 2>/dev/null; then
         cp "$alt_profile" "$alt_profile.terse-backup"
         if [ "$(uname -s)" = "Darwin" ]; then
-            sed -i '' "/# terse - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
+            sed -i '' "/# terse/d" "$alt_profile"
             sed -i '' "\|$BIN_DIR|d" "$alt_profile"
         else
-            sed -i "/# terse - Token Efficiency through Refined Stream Engineering/d" "$alt_profile"
+            sed -i "/# terse/d" "$alt_profile"
             sed -i "\|$BIN_DIR|d" "$alt_profile"
         fi
         ok "Also removed PATH entry from $alt_profile"

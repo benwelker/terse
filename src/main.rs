@@ -17,7 +17,6 @@ mod web;
 
 #[derive(Debug, Parser)]
 #[command(name = "terse")]
-#[command(about = "Token Efficiency through Refined Stream Engineering")]
 struct App {
     #[command(subcommand)]
     command: Commands,

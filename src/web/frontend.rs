@@ -495,7 +495,6 @@ tr:hover { background: rgba(255,255,255,0.02); }
   <header>
     <div>
       <h1><span class="logo">&gt;_ terse</span> Dashboard</h1>
-      <div class="subtitle">Token Efficiency through Refined Stream Engineering</div>
     </div>
     <div class="health-badges" id="health-badges"></div>
   </header>

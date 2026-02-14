@@ -52,7 +52,7 @@ function Write-Err {
 # Confirmation
 # ---------------------------------------------------------------------------
 
-Write-Step "Uninstalling terse (Token Efficiency through Refined Stream Engineering)"
+Write-Step "Uninstalling terse"
 Write-Host ""
 
 if (-not $Force) {

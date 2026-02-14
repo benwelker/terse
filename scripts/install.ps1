@@ -49,7 +49,7 @@ function Write-Err {
 # Step 1: Detect platform & determine download URL
 # ---------------------------------------------------------------------------
 
-Write-Step "Installing terse (Token Efficiency through Refined Stream Engineering)"
+Write-Step "Installing terse"
 Write-Host ""
 
 # Detect architecture

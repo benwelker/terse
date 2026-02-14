@@ -1,12 +1,10 @@
 # terse — Unified Implementation Plan
 
-## Token Efficiency through Refined Stream Engineering
-
 ---
 
 ## Project Overview
 
-**Name:** terse (Token Efficiency through Refined Stream Engineering)
+**Name:** terse
 
 **Purpose:** Single Rust binary that intercepts AI coding assistant commands, optimizes outputs via fast rule-based optimizers AND a local LLM smart path (Ollama HTTP API), and reduces token consumption by 60–80%.
 
@@ -883,7 +881,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
   {
     "name": "terse",
     "version": "1.0.0",
-    "description": "Token Efficiency through Refined Stream Engineering - Reduce token usage by 60-80%",
+    "description": "Reduce token usage",
     "author": "Benjamin Welker",
     "license": "MIT",
     "hooks": {
@@ -1009,7 +1007,7 @@ name = "terse"
 version = "0.1.0"
 edition = "2021"
 authors = ["Benjamin Welker"]
-description = "Token Efficiency through Refined Stream Engineering"
+description = "Reduce token usage"
 license = "MIT"
 repository = "https://github.com/benwelker/terse"
 

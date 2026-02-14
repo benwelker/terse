@@ -1016,7 +1016,7 @@ fn uninstall_remove_unix_path(bin_dir: &str) {
             .filter(|line| {
                 !line.contains(bin_dir)
                     && !line
-                        .contains("# TERSE - Token Efficiency through Refined Stream Engineering")
+                        .contains("# terse")
             })
             .collect();
 
