@@ -90,10 +90,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust 1.87.0 (edition 2024 minimum)
+      - name: Install Rust 1.93.1 (edition 2024 minimum)
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: '1.87.0'
+          toolchain: '1.93.1'
 
       - name: Check compilation
         run: cargo check

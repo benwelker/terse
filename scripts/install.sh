@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TERSE Installation Script for macOS and Linux
-# Usage: curl -fsSL https://raw.githubusercontent.com/benwelker/terse/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/install.sh | bash
 #    or: ./install.sh
 #
 # This script:
