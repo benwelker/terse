@@ -1,6 +1,6 @@
 # TERSE — Continuous Integration
 #
-# Runs on every push and pull request to main.
+# Runs on every push and pull request to master.
 # Matrix build across Windows, macOS, and Linux.
 # Checks: formatting, linting, tests, and compilation.
 
@@ -8,9 +8,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
