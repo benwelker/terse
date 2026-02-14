@@ -37,6 +37,7 @@ use crate::llm;
 use crate::llm::config::SmartPathConfig;
 use crate::matching;
 use crate::optimizers::OptimizerRegistry;
+use crate::preprocessing;
 use crate::safety::circuit_breaker::{CircuitBreaker, PathId};
 use crate::safety::classifier::{self, CommandClass};
 use crate::utils::process::run_shell_command;
@@ -77,6 +78,10 @@ pub struct ExecutionResult {
     pub optimizer_name: String,
     /// LLM latency in milliseconds (only populated for smart path).
     pub latency_ms: Option<u64>,
+    /// Bytes removed by preprocessing (only set for smart path).
+    pub preprocessing_bytes_removed: Option<usize>,
+    /// Percentage of bytes removed by preprocessing (only set for smart path).
+    pub preprocessing_pct: Option<f64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +170,8 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
                     output: result.output,
                     stderr: String::new(),
                     latency_ms: None,
+                    preprocessing_bytes_removed: None,
+                    preprocessing_pct: None,
                 });
             }
             None => {
@@ -199,6 +206,8 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
             output: raw_output.stdout,
             stderr: raw_output.stderr,
             latency_ms: None,
+            preprocessing_bytes_removed: None,
+            preprocessing_pct: None,
         });
     }
 
@@ -208,17 +217,26 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         && cb.is_allowed(PathId::SmartPath)
         && smart_config.enabled
     {
-        match llm::optimize_with_llm(command, &raw_text) {
+        // Preprocess: strip noise before sending to LLM
+        let preprocessed = preprocessing::preprocess(&raw_text, command);
+        let pp_bytes_removed = preprocessed.bytes_removed;
+        let pp_pct = preprocessed.reduction_pct;
+
+        match llm::optimize_with_llm(command, &preprocessed.text) {
             Ok(llm_result) => {
                 cb.record_success(PathId::SmartPath);
                 return Ok(ExecutionResult {
-                    original_tokens: llm_result.original_tokens,
+                    // Token counts: original is from the *raw* output (before
+                    // preprocessing), optimized is from the LLM output.
+                    original_tokens: estimate_tokens(&raw_text),
                     optimized_tokens: llm_result.optimized_tokens,
                     path: OptimizationPath::SmartPath,
                     optimizer_name: format!("llm:{}", llm_result.model),
                     output: llm_result.output,
                     stderr: String::new(),
                     latency_ms: Some(llm_result.latency_ms),
+                    preprocessing_bytes_removed: Some(pp_bytes_removed),
+                    preprocessing_pct: Some(pp_pct),
                 });
             }
             Err(_) => {
@@ -237,6 +255,8 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         output: raw_output.stdout,
         stderr: raw_output.stderr,
         latency_ms: None,
+        preprocessing_bytes_removed: None,
+        preprocessing_pct: None,
     })
 }
 

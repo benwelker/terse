@@ -325,6 +325,8 @@ mod tests {
                 optimizer_used: "git".to_string(),
                 success: true,
                 latency_ms: None,
+                preprocessing_bytes_removed: None,
+                preprocessing_pct: None,
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:05:00+00:00".to_string(),
@@ -336,6 +338,8 @@ mod tests {
                 optimizer_used: "git".to_string(),
                 success: true,
                 latency_ms: None,
+                preprocessing_bytes_removed: None,
+                preprocessing_pct: None,
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:10:00+00:00".to_string(),
@@ -347,6 +351,8 @@ mod tests {
                 optimizer_used: "llm:llama3.2:1b".to_string(),
                 success: true,
                 latency_ms: Some(1500),
+                preprocessing_bytes_removed: Some(500),
+                preprocessing_pct: Some(25.0),
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:15:00+00:00".to_string(),
@@ -358,6 +364,8 @@ mod tests {
                 optimizer_used: "passthrough".to_string(),
                 success: true,
                 latency_ms: None,
+                preprocessing_bytes_removed: None,
+                preprocessing_pct: None,
             },
         ]
     }

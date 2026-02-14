@@ -7,6 +7,7 @@ mod hook;
 mod llm;
 mod matching;
 mod optimizers;
+mod preprocessing;
 mod router;
 mod run;
 mod safety;

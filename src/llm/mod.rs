@@ -45,6 +45,7 @@ pub struct LlmResult {
     /// The condensed output text.
     pub output: String,
     /// Token estimate of the original raw output.
+    #[allow(dead_code)]
     pub original_tokens: usize,
     /// Token estimate of the condensed output.
     pub optimized_tokens: usize,

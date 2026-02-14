@@ -32,6 +32,12 @@ pub struct CommandLogEntry {
     /// LLM latency in milliseconds (only set for smart-path calls).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<u64>,
+    /// Bytes removed by preprocessing (only set for smart-path calls).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub preprocessing_bytes_removed: Option<usize>,
+    /// Percentage of bytes removed by preprocessing (only set for smart-path calls).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub preprocessing_pct: Option<f64>,
 }
 
 fn default_true() -> bool {
@@ -60,7 +66,7 @@ pub fn log_command_result(
     optimizer_used: &str,
     success: bool,
 ) {
-    log_command_result_with_latency(
+    log_command_result_full(
         command,
         path,
         original_tokens,
@@ -68,10 +74,13 @@ pub fn log_command_result(
         optimizer_used,
         success,
         None,
+        None,
+        None,
     )
 }
 
 /// Log a command result including LLM latency.
+#[allow(dead_code)]
 pub fn log_command_result_with_latency(
     command: &str,
     path: &str,
@@ -80,6 +89,32 @@ pub fn log_command_result_with_latency(
     optimizer_used: &str,
     success: bool,
     latency_ms: Option<u64>,
+) {
+    log_command_result_full(
+        command,
+        path,
+        original_tokens,
+        optimized_tokens,
+        optimizer_used,
+        success,
+        latency_ms,
+        None,
+        None,
+    )
+}
+
+/// Log a command result with all fields including preprocessing metadata.
+#[allow(clippy::too_many_arguments)]
+pub fn log_command_result_full(
+    command: &str,
+    path: &str,
+    original_tokens: usize,
+    optimized_tokens: usize,
+    optimizer_used: &str,
+    success: bool,
+    latency_ms: Option<u64>,
+    preprocessing_bytes_removed: Option<usize>,
+    preprocessing_pct: Option<f64>,
 ) {
     let savings_pct = if original_tokens == 0 {
         0.0
@@ -98,6 +133,8 @@ pub fn log_command_result_with_latency(
         optimizer_used: optimizer_used.to_string(),
         success,
         latency_ms,
+        preprocessing_bytes_removed,
+        preprocessing_pct,
     };
 
     let _ = append_log_entry(&entry);

@@ -2,7 +2,7 @@ use std::io::Write;
 
 use anyhow::{Context, Result};
 
-use crate::analytics::logger::log_command_result_with_latency;
+use crate::analytics::logger::log_command_result_full;
 use crate::router;
 
 /// Execute a command with optimization and print the result to stdout.
@@ -18,7 +18,7 @@ use crate::router;
 pub fn execute(command: &str) -> Result<()> {
     let result = router::execute_run(command)?;
 
-    log_command_result_with_latency(
+    log_command_result_full(
         command,
         &result.path.to_string(),
         result.original_tokens,
@@ -26,6 +26,8 @@ pub fn execute(command: &str) -> Result<()> {
         &result.optimizer_name,
         true, // success — we reached this point without error
         result.latency_ms,
+        result.preprocessing_bytes_removed,
+        result.preprocessing_pct,
     );
 
     std::io::stdout()
