@@ -3,6 +3,8 @@
 **🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
 
 [![Rust Edition](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
+[![CI](https://img.shields.io/github/actions/workflow/status/benwelker/terse/ci.yml?branch=main&label=CI&logo=github)](https://github.com/benwelker/terse/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/benwelker/terse/release.yml?label=Release&logo=github)](https://github.com/benwelker/terse/actions/workflows/release.yml)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue)](Cargo.toml)
 [![CLI](https://img.shields.io/badge/type-CLI-informational)](#cli-usage)
 [![Smart%20Path](https://img.shields.io/badge/smart_path-ollama%20opt--in-lightgrey)](#smart-path-setup-ollama)
@@ -108,13 +110,13 @@ Downloads the latest release binary, places it in `~/.terse/bin/`, creates a def
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bwelker/terse/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/benwelker/terse/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/bwelker/terse/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/benwelker/terse/main/install.ps1 | iex
 ```
 
 Both scripts will:
@@ -128,7 +130,7 @@ Both scripts will:
 ### From source
 
 ```bash
-git clone https://github.com/bwelker/terse.git
+git clone https://github.com/benwelker/terse.git
 cd terse
 cargo build --release
 ```

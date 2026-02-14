@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TERSE Installation Script for macOS and Linux
-# Usage: curl -fsSL https://raw.githubusercontent.com/bwelker/terse/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/benwelker/terse/main/install.sh | bash
 #    or: ./install.sh
 #
 # This script:
@@ -12,7 +12,7 @@
 
 set -euo pipefail
 
-REPO="bwelker/terse"
+REPO="benwelker/terse"
 TERSE_HOME="$HOME/.terse"
 BIN_DIR="$TERSE_HOME/bin"
 BINARY="$BIN_DIR/terse"

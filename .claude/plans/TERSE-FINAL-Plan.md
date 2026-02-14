@@ -1011,7 +1011,7 @@ edition = "2021"
 authors = ["Benjamin Welker"]
 description = "Token Efficiency through Refined Stream Engineering"
 license = "MIT"
-repository = "https://github.com/bwelker/terse"
+repository = "https://github.com/benwelker/terse"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

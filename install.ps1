@@ -1,5 +1,5 @@
 # TERSE Installation Script for Windows
-# Usage: irm https://raw.githubusercontent.com/bwelker/terse/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/benwelker/terse/main/install.ps1 | iex
 #    or: .\install.ps1
 #
 # This script:
