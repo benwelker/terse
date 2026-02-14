@@ -5,7 +5,7 @@
 [![Rust Edition](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
 [![CI](https://img.shields.io/github/actions/workflow/status/benwelker/terse/ci.yml?branch=main&label=CI&logo=github)](https://github.com/benwelker/terse/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/benwelker/terse/release.yml?label=Release&logo=github)](https://github.com/benwelker/terse/actions/workflows/release.yml)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue)](Cargo.toml)
+[![Version](https://img.shields.io/github/v/release/benwelker/terse?label=version)](https://github.com/benwelker/terse/releases)
 [![CLI](https://img.shields.io/badge/type-CLI-informational)](#cli-usage)
 [![Smart%20Path](https://img.shields.io/badge/smart_path-ollama%20opt--in-lightgrey)](#smart-path-setup-ollama)
 
