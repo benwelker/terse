@@ -59,33 +59,20 @@ err()   { printf '  \033[31m✗\033[0m %s\n' "$1"; }
 step "Uninstalling TERSE (Token Efficiency through Refined Stream Engineering)"
 echo ""
 
-if [ "$FORCE" = false ]; then
-    if [ "$KEEP_DATA" = true ]; then
-        echo "  This will remove the terse binary and hook registration."
-        echo "  Config and log files in $TERSE_HOME will be preserved."
-    else
-        echo "  This will remove ALL terse files including config and logs."
-        echo "  Use --keep-data to preserve config and log files."
-    fi
-    echo ""
+if [ "$KEEP_DATA" = true ]; then
+    echo "  This will remove the terse binary and hook registration."
+    echo "  Config and log files in $TERSE_HOME will be preserved."
+else
+    echo "  This will remove ALL terse files including config and logs."
+    echo "  Use --keep-data to preserve config and log files."
+fi
+echo ""
 
-    # When piped (curl | bash), stdin is the script itself, so we must
-    # read the user's answer from /dev/tty.  If even that isn't available,
-    # require --force.
-    if [ -t 0 ]; then
-        # Interactive terminal — read normally
-        printf "  Continue? [y/N] "
-        read -r confirm
-    elif [ -r /dev/tty ]; then
-        # Piped execution — read from the real terminal
-        printf "  Continue? [y/N] " > /dev/tty
-        read -r confirm < /dev/tty
-    else
-        err "Non-interactive and no terminal available."
-        err "Re-run with --force:  curl ... | bash -s -- --force"
-        exit 1
-    fi
-
+# Only prompt when running interactively (not via curl | bash).
+# Piping to bash is itself explicit consent.
+if [ "$FORCE" = false ] && [ -t 0 ]; then
+    printf "  Continue? [y/N] "
+    read -r confirm
     case "$confirm" in
         y|Y|yes|Yes) ;;
         *)
