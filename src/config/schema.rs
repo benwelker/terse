@@ -407,6 +407,8 @@ pub struct OptimizersConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GitOptimizerConfig {
+    /// Whether the git optimizer is enabled.
+    pub enabled: bool,
     /// Maximum log entries to display when user has custom format/limit.
     pub log_max_entries: usize,
     /// Default `-n` limit added when user omits it.
@@ -426,6 +428,7 @@ pub struct GitOptimizerConfig {
 impl Default for GitOptimizerConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             log_max_entries: 50,
             log_default_limit: 20,
             log_line_max_chars: 120,
@@ -441,6 +444,8 @@ impl Default for GitOptimizerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FileOptimizerConfig {
+    /// Whether the file optimizer is enabled.
+    pub enabled: bool,
     /// Maximum entries for long-format `ls -l` output.
     pub ls_max_entries: usize,
     /// Maximum items for simple `ls` output.
@@ -457,11 +462,17 @@ pub struct FileOptimizerConfig {
     pub wc_max_lines: usize,
     /// Maximum lines for `tree` output.
     pub tree_max_lines: usize,
+    /// Directory names to prune from `tree` output.
+    ///
+    /// When a tree entry matches one of these names, the entire subtree is
+    /// collapsed into a single `[contents hidden]` marker. Case-insensitive.
+    pub tree_noise_dirs: Vec<String>,
 }
 
 impl Default for FileOptimizerConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             ls_max_entries: 50,
             ls_max_items: 60,
             find_max_results: 40,
@@ -470,14 +481,53 @@ impl Default for FileOptimizerConfig {
             cat_tail_lines: 30,
             wc_max_lines: 30,
             tree_max_lines: 60,
+            tree_noise_dirs: default_tree_noise_dirs(),
         }
     }
+}
+
+/// Default set of directory names to prune from tree output.
+fn default_tree_noise_dirs() -> Vec<String> {
+    [
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".tox",
+        ".next",
+        ".nuxt",
+        ".cache",
+        "coverage",
+        ".nyc_output",
+        "vendor",
+        "Pods",
+        ".gradle",
+        ".idea",
+        ".vs",
+        ".vscode",
+        "bin",
+        "obj",
+        "target",
+        "dist",
+        "build",
+        ".angular",
+        ".svn",
+        ".hg",
+        ".terraform",
+        ".serverless",
+    ]
+    .iter()
+    .map(|s| (*s).to_string())
+    .collect()
 }
 
 /// Build/test/lint optimizer limits.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BuildOptimizerConfig {
+    /// Whether the build optimizer is enabled.
+    pub enabled: bool,
     /// Maximum failure detail lines in test output.
     pub test_max_failure_lines: usize,
     /// Maximum error lines in test output.
@@ -495,6 +545,7 @@ pub struct BuildOptimizerConfig {
 impl Default for BuildOptimizerConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             test_max_failure_lines: 80,
             test_max_error_lines: 40,
             test_max_warnings: 10,
@@ -509,6 +560,8 @@ impl Default for BuildOptimizerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DockerOptimizerConfig {
+    /// Whether the docker optimizer is enabled.
+    pub enabled: bool,
     /// Maximum rows for `docker ps` output.
     pub ps_max_rows: usize,
     /// Maximum rows for `docker images` output.
@@ -528,6 +581,7 @@ pub struct DockerOptimizerConfig {
 impl Default for DockerOptimizerConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             ps_max_rows: 30,
             images_max_rows: 30,
             logs_max_tail: 30,
@@ -543,6 +597,8 @@ impl Default for DockerOptimizerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GenericOptimizerConfig {
+    /// Whether the generic (fallback) optimizer is enabled.
+    pub enabled: bool,
     /// Minimum raw output size (bytes) before optimization kicks in.
     /// Outputs smaller than this are passed through unchanged.
     pub min_size_bytes: usize,
@@ -553,6 +609,7 @@ pub struct GenericOptimizerConfig {
 impl Default for GenericOptimizerConfig {
     fn default() -> Self {
         Self {
+            enabled: true,
             min_size_bytes: 512,
             max_lines: 200,
         }
@@ -673,6 +730,7 @@ normalize_tabs = true
 trim_trailing = true
 
 [optimizers.git]
+enabled = true
 log_max_entries = 50
 log_default_limit = 20
 log_line_max_chars = 120
@@ -682,6 +740,7 @@ branch_max_local = 20
 branch_max_remote = 10
 
 [optimizers.file]
+enabled = true
 ls_max_entries = 50
 ls_max_items = 60
 find_max_results = 40
@@ -692,6 +751,7 @@ wc_max_lines = 30
 tree_max_lines = 60
 
 [optimizers.build]
+enabled = true
 test_max_failure_lines = 80
 test_max_error_lines = 40
 test_max_warnings = 10
@@ -700,6 +760,7 @@ build_max_warnings = 10
 lint_max_issue_lines = 80
 
 [optimizers.docker]
+enabled = true
 ps_max_rows = 30
 images_max_rows = 30
 logs_max_tail = 30
@@ -709,6 +770,7 @@ compose_max_rows = 30
 resource_max_rows = 30
 
 [optimizers.generic]
+enabled = true
 min_size_bytes = 512                  # Outputs below this size skip generic cleanup
 max_lines = 200                       # Maximum lines before head/tail truncation
 "#

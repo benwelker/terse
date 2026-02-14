@@ -14,8 +14,8 @@ pub struct ProcessOutput {
 
 pub fn run_shell_command(command: &str) -> Result<ProcessOutput> {
     #[cfg(target_os = "windows")]
-    let output = Command::new("cmd")
-        .arg("/C")
+    let output = Command::new("pwsh")
+        .arg("-Command")
         .arg(command)
         .output()
         .with_context(|| format!("failed executing command: {command}"))?;

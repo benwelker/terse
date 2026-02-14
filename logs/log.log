@@ -1,0 +1,134 @@
+PS C:\source\repos\IDOE> C:\source\repos\terse\target\debug/terse.exe test tree     
+TERSE Optimization Preview
+==================================================
+  Command:       tree
+  Hook decision: rewrite
+  Path taken:    fast
+  Optimizer:     file
+  Preprocessing: 748528 bytes removed (96.6%) in 206ms
+  PP tokens:     152674 → 5368 (96.5% savings)
+  Tokens:        5368 → 380 (92.92% savings)
+
+--- Output ---
+Folder PATH listing
+Volume serial number is D8AD-20BF
+C:.
++---.ai-tss
++---.claude
+�   +---commands
+�   +---plans
+�   +---tickets
+�   +---tools
++---.github
+�   +---agents
+�   +---instructions
+�   +---plugins
+�   +---prompts
++---.husky
+�   +---_
++---.idea
+�   +---.idea.Achieve
+�   �   +---.idea
+�   �       +---codeStyles
+�   �       +---dataSources
+�   �       �   +---ec9475e9-edcd-420d-a146-a345f7d2c61d
+�   �       �       +---storage_v2
+�   �       �           +---_src_
+�   �       �               +---database
+�   �       �                   +---qa24.UtA0AA
+�   �       �                       +---schema
+�   �       +---inspectionProfiles
+�   �       +---shelf
+�   �           +---Changes
+�   �           +---Changes1
+�   �           +---Changes10
+[... 53 more similar line(s) matching "�   �           +---Changes1..."]
+�   �           +---Uncommitted_changes_before_rebase_[Changes]
+�   �           +---Uncommitted_changes_before_rebase_[Changes]1
+�   �           +---Uncommitted_changes_before_Update_at_5_20_2024_10_36_AM_[Changes]
+�   +---config
++---.vscode
++---Achieve.CannedReporting
+�   +---bin
+�   �   +---Debug
+�   �       +---net8.0
+�   +---obj
+�   �   +---Debug
+�   �       +---net8.0
+�   �           +---ref
+�   �           +---refint
+�   �           +---staticwebassets
+�   +---Properties
++---Achieve.Dal
+�   +---bin
+�   �   +---app
+�   �   �   +---cs
+�   �   �   +---de
+�   �   �   +---es
+�   �   �   +---fr
+�   �   �   +---it
+�   �   �   +---ja
+�   �   �   +---ko
+...+681 more lines (740 total)[output truncated: showing 1705 of 774758 bytes (99.78% removed)]
+PS C:\source\repos\IDOE> C:\source\repos\terse\target\debug/terse.exe test ls
+TERSE Optimization Preview
+==================================================
+  Command:       ls
+  Hook decision: rewrite
+  Path taken:    fast
+  Optimizer:     file
+  Preprocessing: 502 bytes removed (13.3%) in 3ms
+  PP tokens:     942 → 817 (13.3% savings)
+  Tokens:        817 → 817 (0.00% savings)
+
+--- Output ---
+Directory: C:\source\repos\IDOE
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----            2/3/2026 12:50 PM                .ai-tss
+d----           2/13/2026  5:51 PM                .claude
+d----           2/11/2026 10:20 PM                .github
+d----           4/14/2025 11:29 AM                .husky
+d----          12/16/2024 10:41 AM                .idea
+d----           11/8/2023 10:03 AM                .vscode
+d----            2/4/2025  9:14 AM                Achieve.CannedReporting
+d----           2/13/2026  5:51 PM                Achieve.Dal
+d----           2/12/2026  9:21 PM                Achieve.Documentation
+d----           2/12/2026  5:11 PM                Achieve.Domain
+d----           2/12/2026  5:11 PM                Achieve.Domain.ElectronicSignature
+d----           2/12/2026  5:11 PM                Achieve.Domain.Tests
+d----           2/10/2025 11:41 AM                Achieve.Helpers
+d----           2/12/2026  5:11 PM                Achieve.Models
+d----           2/12/2026  5:11 PM                Achieve.Models.ElectronicSignature
+d----           2/12/2026  5:11 PM                Achieve.Notifications
+d----           2/12/2026  5:11 PM                Achieve.ReportProcessor
+d----           2/12/2026  5:11 PM                Achieve.Seeding
+d----           2/12/2026  5:11 PM                Achieve.Templates
+d----           2/12/2026  5:11 PM                Achieve.Tests
+d----           2/12/2026  5:11 PM                Achieve.Util
+d----           2/13/2026  5:51 PM                Achieve.Web
+d----           2/12/2026  5:11 PM                Achieve.Web.Tests
+d----           2/12/2026  5:11 PM                Ascend.DataDashboard
+d----           2/12/2026  5:11 PM                Ascend.HtmlToPdfImage
+d----           2/11/2026 11:08 AM                bin
+d----           2/11/2026  9:40 PM                docs
+d----           2/12/2026  5:11 PM                pipelines
+d----          10/21/2025  2:12 PM                ProjectDependencies
+d----           2/11/2026  9:40 PM                security-testing
+d----           2/12/2026  5:11 PM                SifWrapper
+d----           2/12/2026  5:11 PM                SystemMessageEmailProcessor
+-a---            5/3/2024  3:49 PM             98 .editorconfig
+-a---           2/12/2026  9:47 PM           1104 .gitignore
+-a---           1/27/2026  1:05 PM            107 .gitmodules
+-a---           2/12/2026  5:11 PM          21497 Achieve.sln
+-a---          10/30/2023 12:08 PM           1844 Achieve.sln.DotSettings
+-a---          12/30/2024 11:39 AM           6747 Achieve.sln.DotSettings.user
+-a---           2/10/2026 11:11 AM           1943 azure-codescan.yml
+-a---           2/12/2026  9:30 PM           1533 CLAUDE.local.md
+-a---           2/12/2026  9:52 PM           9167 CLAUDE.md
+-a---           2/12/2026  5:11 PM            262 Directory.Build.props
+-a---           2/12/2026  5:11 PM           9328 Directory.Packages.props
+-a---           2/10/2026 12:15 PM             87 global.json
+-a---           2/13/2026 11:54 AM            821 nuget.config
+-a---           2/11/2026  9:40 PM            973 package-removal-candidates.md
+-a---          10/30/2023 12:08 PM           5288 README.md[output truncated: showing 3265 of 3768 bytes (13.35% removed)]

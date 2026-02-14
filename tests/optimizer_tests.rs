@@ -566,3 +566,62 @@ fn registry_build_has_priority_over_generic() {
     assert!(result.is_some());
     assert_eq!(result.unwrap().optimizer_used, "build");
 }
+
+#[test]
+fn registry_disabled_optimizer_not_loaded() {
+    use terse::config::schema::OptimizersConfig;
+    use terse::optimizers::OptimizerRegistry;
+
+    let mut cfg = OptimizersConfig::default();
+    cfg.git.enabled = false;
+
+    let registry = OptimizerRegistry::from_config(&cfg);
+
+    // Git commands should no longer be handled by the git optimizer
+    // (generic will still catch them as a fallback)
+    let result = registry.optimize_first(
+        "git status",
+        "On branch main\nnothing to commit, working tree clean",
+    );
+    assert!(result.is_some());
+    // Should fall through to generic, not git
+    assert_ne!(result.unwrap().optimizer_used, "git");
+}
+
+#[test]
+fn registry_all_disabled_except_generic() {
+    use terse::config::schema::OptimizersConfig;
+    use terse::optimizers::OptimizerRegistry;
+
+    let mut cfg = OptimizersConfig::default();
+    cfg.git.enabled = false;
+    cfg.file.enabled = false;
+    cfg.build.enabled = false;
+    cfg.docker.enabled = false;
+
+    let registry = OptimizerRegistry::from_config(&cfg);
+
+    // Everything falls through to generic
+    let result = registry.optimize_first("git status", "On branch main\nnothing to commit");
+    assert!(result.is_some());
+    assert_eq!(result.unwrap().optimizer_used, "generic");
+}
+
+#[test]
+fn registry_all_disabled_returns_none() {
+    use terse::config::schema::OptimizersConfig;
+    use terse::optimizers::OptimizerRegistry;
+
+    let mut cfg = OptimizersConfig::default();
+    cfg.git.enabled = false;
+    cfg.file.enabled = false;
+    cfg.build.enabled = false;
+    cfg.docker.enabled = false;
+    cfg.generic.enabled = false;
+
+    let registry = OptimizerRegistry::from_config(&cfg);
+
+    // Nothing can handle it
+    assert!(!registry.can_handle("git status"));
+    assert!(registry.optimize_first("git status", "output").is_none());
+}

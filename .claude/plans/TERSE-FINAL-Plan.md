@@ -710,7 +710,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 7: Expanded Optimizers (Week 7–8) ⏭️ NEXT
+### Phase 7: Expanded Optimizers (Week 7–8) ✅ COMPLETE
 
 **Goal:** Cover 80%+ of commands by frequency with rule-based fast path.
 
@@ -720,28 +720,28 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 **Deliverables:**
 
-- [ ] Implement `src/optimizers/file.rs`:
+- [x] Implement `src/optimizers/file.rs`:
   - `ls`/`dir` → tree-like compact format, limit to N items
   - `find` → compact paths, group by directory
   - `cat`/`type` → truncate long files with line count summary
   - `wc` → single-line result
-- [ ] Implement `src/optimizers/build.rs`:
+- [x] Implement `src/optimizers/build.rs`:
   - `npm test`/`cargo test`/`dotnet test` → show failures only, pass/fail summary
   - `npm install`/`cargo build`/`dotnet build` → success/fail + error details only
-- [ ] Implement `src/optimizers/docker.rs`:
+- [x] Implement `src/optimizers/docker.rs`:
   - `docker ps` → compact table (name, image, status, ports)
   - `docker images` → compact list (repo, tag, size)
   - `docker logs` → tail + error extraction
-- [ ] Implement `src/optimizers/generic.rs` — whitespace optimization pass:
+- [x] Implement `src/optimizers/generic.rs` — whitespace optimization pass:
   - Max 2 consecutive newlines
   - Normalize tabs to spaces
   - Remove trailing whitespace
   - Trim leading/trailing blank lines
   - Applied as post-processing after any optimizer (including LLM output)
-- [ ] Update optimizer registry to include all new modules
-- [ ] Write unit tests for each optimizer against sample outputs
-- [ ] Before/after token comparison documentation
-- [ ] Add documentation for how to add additional optimizers
+- [x] Update optimizer registry to include all new modules
+- [x] Write unit tests for each optimizer against sample outputs
+- [x] Before/after token comparison documentation
+- [x] Add documentation for how to add additional optimizers
 
 **Success Criteria:**
 
@@ -752,7 +752,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 8: Prompt Engineering & LLM Quality (Week 8–9)
+### Phase 8: Prompt Engineering & LLM Quality (Week 8–9) ⏭️ SKIP FOR NOW
 
 **Goal:** Maximize LLM smart path quality and minimize hallucination.
 
@@ -786,7 +786,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10)
+### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10) ⏭️ SKIP FOR NOW
 
 **Goal:** Bulletproof error handling — TERSE never breaks a Claude Code session.
 
@@ -833,7 +833,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 10: Cross-Platform & CI/CD (Week 10–11)
+### Phase 10: Cross-Platform & CI/CD (Week 10–11) ⏭️ NEXT
 
 **Goal:** Build and distribute for Windows, macOS, and Linux.
 

@@ -88,18 +88,30 @@ impl OptimizerRegistry {
     }
 
     /// Create a registry using limits from the given config.
+    ///
+    /// Only optimizers whose `enabled` flag is `true` are loaded.
     pub fn from_config(cfg: &OptimizersConfig) -> Self {
-        Self {
-            optimizers: vec![
-                // Specialized optimizers (tried first, in priority order)
-                Box::new(GitOptimizer::from_config(&cfg.git)),
-                Box::new(FileOptimizer::from_config(&cfg.file)),
-                Box::new(BuildOptimizer::from_config(&cfg.build)),
-                Box::new(DockerOptimizer::from_config(&cfg.docker)),
-                // Generic fallback (tried last — catches everything)
-                Box::new(GenericOptimizer::from_config(&cfg.generic)),
-            ],
+        let mut optimizers: Vec<Box<dyn Optimizer>> = Vec::new();
+
+        // Specialized optimizers (tried first, in priority order)
+        if cfg.git.enabled {
+            optimizers.push(Box::new(GitOptimizer::from_config(&cfg.git)));
         }
+        if cfg.file.enabled {
+            optimizers.push(Box::new(FileOptimizer::from_config(&cfg.file)));
+        }
+        if cfg.build.enabled {
+            optimizers.push(Box::new(BuildOptimizer::from_config(&cfg.build)));
+        }
+        if cfg.docker.enabled {
+            optimizers.push(Box::new(DockerOptimizer::from_config(&cfg.docker)));
+        }
+        // Generic fallback (tried last — catches everything)
+        if cfg.generic.enabled {
+            optimizers.push(Box::new(GenericOptimizer::from_config(&cfg.generic)));
+        }
+
+        Self { optimizers }
     }
 
     /// Check whether any registered optimizer can handle the command.
