@@ -312,8 +312,10 @@ mod tests {
 
     #[test]
     fn client_strips_trailing_slash() {
-        let mut config = SmartPathConfig::default();
-        config.ollama_url = "http://localhost:11434/".to_string();
+        let config = SmartPathConfig {
+            ollama_url: "http://localhost:11434/".to_string(),
+            ..Default::default()
+        };
         let client = OllamaClient::from_config(&config);
         assert_eq!(client.base_url, "http://localhost:11434");
     }
