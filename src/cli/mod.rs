@@ -8,7 +8,7 @@
 //! - `terse test "command"` — preview optimization pipeline
 //! - `terse config show|init|set|reset` — configuration management
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use colored::Colorize;
 
 use crate::analytics::logger;
@@ -762,6 +762,808 @@ fn colorize_path(path: &str) -> colored::ColoredString {
         "smart" => path.blue(),
         "passthrough" => path.yellow(),
         _ => path.normal(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// terse self uninstall
+// ---------------------------------------------------------------------------
+
+/// Uninstall terse: deregister hook, remove PATH entry, and delete files.
+///
+/// Mirrors the logic in `scripts/uninstall.sh` and `scripts/uninstall.ps1`
+/// but runs natively — no network, no python3 dependency, no version mismatch.
+///
+/// Follows the `rustup self uninstall` convention.
+pub fn run_self_uninstall(keep_data: bool, force: bool) -> Result<()> {
+    use std::io::Write;
+
+    println!("{}", "terse Self-Uninstall".bold().cyan());
+    println!("{}", "=".repeat(40));
+    println!();
+
+    if keep_data {
+        println!(
+            "  This will remove the terse binary and hook registration."
+        );
+        println!(
+            "  Config and log files in ~/.terse/ will be {}.",
+            "preserved".yellow()
+        );
+    } else {
+        println!(
+            "  This will remove {} terse files including config and logs.",
+            "ALL".bold().red()
+        );
+        println!(
+            "  Use {} to preserve config and log files.",
+            "--keep-data".bold()
+        );
+    }
+    println!();
+
+    // Confirmation prompt (skip if --force or non-interactive)
+    if !force {
+        print!("  Continue? [y/N] ");
+        std::io::stdout().flush()?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let answer = input.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!();
+            println!("{}", "  Uninstall cancelled.".yellow());
+            return Ok(());
+        }
+        println!();
+    }
+
+    // Step 1: Deregister Claude Code hook
+    uninstall_deregister_hook();
+
+    // Step 2: Remove from shell profile / PATH
+    uninstall_remove_path();
+
+    // Step 3: Remove files
+    uninstall_remove_files(keep_data);
+
+    // Done
+    println!();
+    println!("{}", "Uninstall complete!".bold().cyan());
+    println!();
+    if keep_data {
+        let home = process::terse_home_dir()
+            .map(|p| process::to_display_path(&p.to_string_lossy()))
+            .unwrap_or_else(|| "~/.terse".to_string());
+        println!("  Data preserved at: {home}");
+        println!("  To fully remove:   rm -rf ~/.terse");
+    } else {
+        println!("  All terse files have been removed.");
+    }
+    println!();
+
+    Ok(())
+}
+
+/// Deregister the terse hook from `~/.claude/settings.json`.
+fn uninstall_deregister_hook() {
+    println!("{}", "Removing Claude Code hook...".bold());
+
+    let Some(settings_path) = process::claude_settings_path() else {
+        println!("  {} No home directory found", "·".dimmed());
+        return;
+    };
+
+    if !settings_path.exists() {
+        println!(
+            "  {} {}",
+            "✓".green(),
+            "No Claude settings file (nothing to remove)"
+        );
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&settings_path) {
+        Ok(c) => c,
+        Err(e) => {
+            println!(
+                "  {} Could not read settings: {}",
+                "⚠".yellow(),
+                e
+            );
+            return;
+        }
+    };
+
+    let mut settings: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            println!(
+                "  {} Could not parse settings JSON: {}",
+                "⚠".yellow(),
+                e
+            );
+            return;
+        }
+    };
+
+    // Navigate to hooks.PreToolUse array
+    let modified = if let Some(hooks) = settings.get_mut("hooks") {
+        if let Some(pre) = hooks.get_mut("PreToolUse") {
+            if let Some(arr) = pre.as_array_mut() {
+                let original_len = arr.len();
+                arr.retain(|entry| !is_terse_hook_entry(entry));
+                let removed = original_len - arr.len();
+
+                if removed > 0 {
+                    // Clean up empty PreToolUse array
+                    if arr.is_empty() {
+                        if let Some(hooks_obj) = hooks.as_object_mut() {
+                            hooks_obj.remove("PreToolUse");
+                            // Clean up empty hooks object
+                            if hooks_obj.is_empty() {
+                                if let Some(root) = settings.as_object_mut() {
+                                    root.remove("hooks");
+                                }
+                            }
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if modified {
+        match serde_json::to_string_pretty(&settings) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&settings_path, json) {
+                    println!(
+                        "  {} Could not write settings: {}",
+                        "⚠".yellow(),
+                        e
+                    );
+                } else {
+                    println!(
+                        "  {} Hook removed from {}",
+                        "✓".green(),
+                        process::to_display_path(&settings_path.to_string_lossy())
+                    );
+                }
+            }
+            Err(e) => {
+                println!(
+                    "  {} Could not serialize settings: {}",
+                    "⚠".yellow(),
+                    e
+                );
+            }
+        }
+    } else {
+        println!(
+            "  {} No terse hook found in Claude settings",
+            "✓".green()
+        );
+    }
+}
+
+/// Check if a JSON value is a terse hook entry (either matcher-based or legacy flat).
+fn is_terse_hook_entry(entry: &serde_json::Value) -> bool {
+    // New matcher-based format: { "matcher": "Bash", "hooks": [{ "command": "...terse...hook..." }] }
+    if let Some(hooks) = entry.get("hooks").and_then(|h| h.as_array()) {
+        for hook in hooks {
+            if let Some(cmd) = hook.get("command").and_then(|c| c.as_str()) {
+                if cmd.contains("terse") && cmd.contains("hook") {
+                    return true;
+                }
+            }
+        }
+    }
+    // Legacy flat format: { "type": "command", "command": "...terse...hook..." }
+    if let Some(cmd) = entry.get("command").and_then(|c| c.as_str()) {
+        if cmd.contains("terse") && cmd.contains("hook") {
+            return true;
+        }
+    }
+    false
+}
+
+/// Remove terse PATH entries from shell profiles (Unix) or user PATH (Windows).
+fn uninstall_remove_path() {
+    println!("{}", "Removing from PATH...".bold());
+
+    let Some(bin_dir) = process::terse_bin_dir() else {
+        println!("  {} Could not determine bin directory", "⚠".yellow());
+        return;
+    };
+
+    let bin_str = bin_dir.to_string_lossy().to_string();
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        uninstall_remove_unix_path(&bin_str);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        uninstall_remove_windows_path(&bin_str);
+    }
+}
+
+/// Remove terse PATH entry from Unix shell profiles.
+#[cfg(not(target_os = "windows"))]
+fn uninstall_remove_unix_path(bin_dir: &str) {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return,
+    };
+
+    let profiles = [
+        home.join(".zshrc"),
+        home.join(".bashrc"),
+        home.join(".profile"),
+        home.join(".bash_profile"),
+        home.join(".config/fish/config.fish"),
+    ];
+
+    let mut removed_any = false;
+
+    for profile in &profiles {
+        if !profile.exists() {
+            continue;
+        }
+
+        let content = match std::fs::read_to_string(profile) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        if !content.contains(bin_dir) {
+            continue;
+        }
+
+        // Filter out lines containing the terse bin dir or the terse comment
+        let filtered: Vec<&str> = content
+            .lines()
+            .filter(|line| {
+                !line.contains(bin_dir)
+                    && !line.contains("# TERSE - Token Efficiency through Refined Stream Engineering")
+            })
+            .collect();
+
+        // Trim trailing blank lines
+        let mut result: Vec<&str> = filtered;
+        while result.last().is_some_and(|l| l.trim().is_empty()) {
+            result.pop();
+        }
+
+        let new_content = if result.is_empty() {
+            String::new()
+        } else {
+            result.join("\n") + "\n"
+        };
+
+        if let Err(e) = std::fs::write(profile, &new_content) {
+            println!(
+                "  {} Could not update {}: {}",
+                "⚠".yellow(),
+                profile.display(),
+                e
+            );
+        } else {
+            println!(
+                "  {} Removed PATH entry from {}",
+                "✓".green(),
+                process::to_display_path(&profile.to_string_lossy())
+            );
+            removed_any = true;
+        }
+    }
+
+    if !removed_any {
+        println!("  {} No PATH entry found in shell profiles", "✓".green());
+    } else {
+        println!(
+            "  {} Restart your terminal for PATH changes to take effect",
+            "⚠".yellow()
+        );
+    }
+}
+
+/// Remove terse bin directory from Windows user PATH.
+#[cfg(target_os = "windows")]
+fn uninstall_remove_windows_path(bin_dir: &str) {
+    use std::process::Command;
+
+    // Read current user PATH via PowerShell
+    let output = match Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            "[Environment]::GetEnvironmentVariable('PATH', 'User')",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            println!(
+                "  {} Could not read user PATH: {}",
+                "⚠".yellow(),
+                e
+            );
+            return;
+        }
+    };
+
+    let user_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if !user_path.contains(bin_dir) {
+        println!("  {} Not found in PATH (nothing to remove)", "✓".green());
+        return;
+    }
+
+    // Filter out our bin dir
+    let new_path: String = user_path
+        .split(';')
+        .filter(|p| !p.is_empty() && *p != bin_dir)
+        .collect::<Vec<_>>()
+        .join(";");
+
+    let set_cmd = format!(
+        "[Environment]::SetEnvironmentVariable('PATH', '{}', 'User')",
+        new_path
+    );
+
+    match Command::new("powershell")
+        .args(["-NoProfile", "-Command", &set_cmd])
+        .output()
+    {
+        Ok(o) if o.status.success() => {
+            println!(
+                "  {} Removed {} from user PATH",
+                "✓".green(),
+                bin_dir
+            );
+            println!(
+                "  {} Restart your terminal for PATH changes to take effect",
+                "⚠".yellow()
+            );
+        }
+        _ => {
+            println!(
+                "  {} Could not update user PATH",
+                "⚠".yellow()
+            );
+        }
+    }
+}
+
+/// Remove terse files from disk.
+///
+/// On Unix, deleting a running binary is safe (inode stays alive until exit).
+/// On Windows, the running exe is locked, so we spawn a detached `cmd /c`
+/// process that waits for this process to exit, then deletes the directory.
+fn uninstall_remove_files(keep_data: bool) {
+    let Some(terse_home) = process::terse_home_dir() else {
+        println!(
+            "  {} Could not determine terse home directory",
+            "⚠".yellow()
+        );
+        return;
+    };
+
+    if keep_data {
+        println!("{}", "Removing binary (keeping config and data)...".bold());
+        let bin_dir = terse_home.join("bin");
+        if bin_dir.exists() {
+            if try_remove_dir(&bin_dir) {
+                println!("  {} Removed {}", "✓".green(), bin_dir.display());
+            } else {
+                schedule_windows_cleanup(&bin_dir);
+            }
+        } else {
+            println!(
+                "  {} Binary directory already removed",
+                "✓".green()
+            );
+        }
+        println!(
+            "  {} Preserved data in {}",
+            "✓".green(),
+            process::to_display_path(&terse_home.to_string_lossy())
+        );
+    } else {
+        println!("{}", "Removing all terse files...".bold());
+        if terse_home.exists() {
+            if try_remove_dir(&terse_home) {
+                println!(
+                    "  {} Removed {}",
+                    "✓".green(),
+                    process::to_display_path(&terse_home.to_string_lossy())
+                );
+            } else {
+                schedule_windows_cleanup(&terse_home);
+            }
+        } else {
+            println!(
+                "  {} Terse home directory already removed",
+                "✓".green()
+            );
+        }
+    }
+}
+
+/// Try to remove a directory. Returns true on success.
+/// On failure (e.g., Windows locked file), returns false.
+fn try_remove_dir(path: &std::path::Path) -> bool {
+    match std::fs::remove_dir_all(path) {
+        Ok(()) => true,
+        Err(_) => false,
+    }
+}
+
+/// On Windows, spawn a detached `cmd /c` that waits for our PID to exit,
+/// then deletes the target directory. On Unix this is a no-op since
+/// deletion of running binaries works natively.
+#[allow(unused_variables)]
+fn schedule_windows_cleanup(path: &std::path::Path) {
+    #[cfg(target_os = "windows")]
+    {
+        let pid = std::process::id();
+        let path_str = path.to_string_lossy();
+        // Wait for our process to exit (tasklist loop), then rmdir /s /q.
+        // START /b runs detached so we don't block.
+        let cleanup_cmd = format!(
+            "/c \"ping -n 2 127.0.0.1 >nul & \
+             :retry & tasklist /fi \"PID eq {pid}\" 2>nul | find \"{pid}\" >nul && \
+             (ping -n 1 127.0.0.1 >nul & goto retry) & \
+             rmdir /s /q \"{path_str}\"\"",
+        );
+        let _ = std::process::Command::new("cmd")
+            .args([&cleanup_cmd])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn();
+        println!(
+            "  {} Scheduled cleanup of {} after exit",
+            "✓".green(),
+            path_str
+        );
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        println!(
+            "  {} Could not remove {}: {}",
+            "⚠".yellow(),
+            path.display(),
+            "unknown error"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// terse update
+// ---------------------------------------------------------------------------
+
+/// GitHub repo for release downloads.
+const GITHUB_REPO: &str = "benwelker/terse";
+
+/// Current binary version from Cargo.toml at compile time.
+const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Update terse to the latest release from GitHub.
+///
+/// Downloads the appropriate binary for the current OS/architecture,
+/// replaces the running binary, and reports success. On Windows, uses
+/// the rename-to-`.old` technique since the running exe is locked.
+pub fn run_self_update(force: bool) -> Result<()> {
+    use std::io::Write;
+
+    println!("{}", "terse Update".bold().cyan());
+    println!("{}", "=".repeat(40));
+    println!();
+    println!("  Current version: {}", CURRENT_VERSION.bold());
+    println!();
+
+    // Step 1: Fetch latest release metadata
+    println!("{}", "Checking for updates...".bold());
+    let release_url = format!(
+        "https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+    );
+    let release: serde_json::Value = ureq::get(&release_url)
+        .set("User-Agent", "terse-updater")
+        .call()
+        .context("could not fetch latest release from GitHub")?
+        .into_json()
+        .context("invalid release JSON from GitHub")?;
+
+    let latest_tag = release["tag_name"]
+        .as_str()
+        .context("no tag_name in release")?;
+
+    // Strip leading 'v' for comparison
+    let latest_version = latest_tag.strip_prefix('v').unwrap_or(latest_tag);
+    println!("  Latest version:  {}", latest_version.bold());
+
+    if latest_version == CURRENT_VERSION {
+        println!();
+        println!("  {} Already up to date!", "✓".green());
+        return Ok(());
+    }
+
+    println!();
+
+    // Confirmation
+    if !force {
+        print!(
+            "  Update {} → {}? [y/N] ",
+            CURRENT_VERSION, latest_version
+        );
+        std::io::stdout().flush()?;
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        let answer = input.trim().to_lowercase();
+        if answer != "y" && answer != "yes" {
+            println!();
+            println!("  {}", "Update cancelled.".yellow());
+            return Ok(());
+        }
+        println!();
+    }
+
+    // Step 2: Find the correct asset URL
+    let target = platform_asset_target();
+    let assets = release["assets"]
+        .as_array()
+        .context("no assets in release")?;
+
+    let download_url = assets
+        .iter()
+        .filter_map(|a| {
+            let name = a["name"].as_str()?;
+            if name.contains(&target) {
+                a["browser_download_url"].as_str().map(|s| s.to_string())
+            } else {
+                None
+            }
+        })
+        .next()
+        .with_context(|| format!("no release asset found for target: {target}"))?;
+
+    println!("{}", format!("Downloading {target}...").bold());
+
+    // Step 3: Download to a temp file
+    let response = ureq::get(&download_url)
+        .set("User-Agent", "terse-updater")
+        .call()
+        .context("download failed")?;
+
+    let mut body = Vec::new();
+    response
+        .into_reader()
+        .read_to_end(&mut body)
+        .context("failed reading download")?;
+
+    println!("  {} Downloaded {} bytes", "✓".green(), format_number(body.len()));
+
+    // Step 4: Extract and replace binary
+    println!("{}", "Installing update...".bold());
+    let bin_dir = process::terse_bin_dir()
+        .context("could not determine terse bin directory")?;
+    let binary_name = process::terse_binary_name();
+    let target_path = bin_dir.join(binary_name);
+
+    std::fs::create_dir_all(&bin_dir)?;
+
+    // The download is a .tar.gz on Unix, .zip on Windows.
+    // Extract the binary from the archive.
+    let extracted = extract_binary_from_archive(&body, binary_name)
+        .context("failed to extract binary from archive")?;
+
+    replace_binary(&target_path, &extracted)?;
+
+    println!(
+        "  {} Updated to {} at {}",
+        "✓".green(),
+        latest_version.bold(),
+        process::to_display_path(&target_path.to_string_lossy())
+    );
+
+    // Step 5: Clean up stale .old file from previous Windows updates
+    clean_old_binary(&bin_dir, binary_name);
+
+    println!();
+    println!("{}", "Update complete!".bold().cyan());
+    println!();
+
+    Ok(())
+}
+
+/// Determine the GitHub release asset target name for this platform.
+fn platform_asset_target() -> String {
+    let os = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
+
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "unknown"
+    };
+
+    format!("terse-{os}-{arch}")
+}
+
+/// Extract the terse binary from a downloaded archive.
+///
+/// Supports `.tar.gz` (Unix releases) and `.zip` (Windows releases).
+/// Uses shell tools (`tar`, PowerShell `Expand-Archive`) to avoid extra
+/// Rust dependencies. Falls back to treating the download as a raw binary
+/// if extraction fails.
+fn extract_binary_from_archive(
+    data: &[u8],
+    binary_name: &str,
+) -> Result<Vec<u8>> {
+    use std::io::Write;
+
+    let temp_dir = std::env::temp_dir().join("terse-update");
+    let _ = std::fs::remove_dir_all(&temp_dir);
+    std::fs::create_dir_all(&temp_dir)?;
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let archive_path = temp_dir.join("download.tar.gz");
+        let mut f = std::fs::File::create(&archive_path)?;
+        f.write_all(data)?;
+        drop(f);
+
+        let status = std::process::Command::new("tar")
+            .args(["xzf", &archive_path.to_string_lossy(), "-C", &temp_dir.to_string_lossy()])
+            .status()
+            .context("failed to run tar")?;
+
+        if !status.success() {
+            anyhow::bail!("tar extraction failed");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let archive_path = temp_dir.join("download.zip");
+        let mut f = std::fs::File::create(&archive_path)?;
+        f.write_all(data)?;
+        drop(f);
+
+        let status = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+                    archive_path.to_string_lossy(),
+                    temp_dir.to_string_lossy()
+                ),
+            ])
+            .status()
+            .context("failed to run Expand-Archive")?;
+
+        if !status.success() {
+            anyhow::bail!("zip extraction failed");
+        }
+    }
+
+    // Find the binary in the extracted contents (could be at root or nested)
+    let binary_path = find_file_recursive(&temp_dir, binary_name)
+        .with_context(|| format!("could not find {binary_name} in archive"))?;
+
+    let content = std::fs::read(&binary_path)
+        .context("failed to read extracted binary")?;
+
+    // Cleanup temp
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    Ok(content)
+}
+
+/// Recursively find a file by name in a directory.
+fn find_file_recursive(
+    dir: &std::path::Path,
+    name: &str,
+) -> Option<std::path::PathBuf> {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.file_name().is_some_and(|n| n == name) {
+                return Some(path);
+            }
+            if path.is_dir() {
+                if let Some(found) = find_file_recursive(&path, name) {
+                    return Some(found);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Replace the binary at `target_path` with `new_binary`.
+///
+/// - Unix: write to a temp file in the same directory, then atomic rename.
+/// - Windows: rename the running exe to `.old` (Windows allows rename of
+///   locked files), then write the new binary.
+fn replace_binary(
+    target_path: &std::path::Path,
+    new_binary: &[u8],
+) -> Result<()> {
+    let parent = target_path
+        .parent()
+        .context("binary path has no parent")?;
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_path = parent.join(".terse-update-tmp");
+        std::fs::write(&temp_path, new_binary)
+            .context("failed writing temp binary")?;
+
+        // Set executable permission
+        let perms = std::fs::Permissions::from_mode(0o755);
+        std::fs::set_permissions(&temp_path, perms)?;
+
+        // Atomic rename
+        std::fs::rename(&temp_path, target_path)
+            .context("failed to replace binary")?;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let old_path = parent.join(format!(
+            "{}.old",
+            target_path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+        ));
+
+        // Remove previous .old if it exists (from a past update)
+        let _ = std::fs::remove_file(&old_path);
+
+        // Rename the running exe to .old (Windows allows this even while locked)
+        if target_path.exists() {
+            std::fs::rename(target_path, &old_path)
+                .context("failed to rename running binary to .old")?;
+        }
+
+        // Write the new binary
+        std::fs::write(target_path, new_binary)
+            .context("failed writing new binary")?;
+    }
+
+    Ok(())
+}
+
+/// Clean up a stale `.old` binary from a previous Windows update.
+/// Called at start or after a successful update.
+fn clean_old_binary(bin_dir: &std::path::Path, binary_name: &str) {
+    let old_path = bin_dir.join(format!("{binary_name}.old"));
+    if old_path.exists() {
+        let _ = std::fs::remove_file(&old_path);
     }
 }
 

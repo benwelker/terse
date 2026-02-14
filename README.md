@@ -1,6 +1,6 @@
 # terse
 
-**🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
+**🌈 99.9% vibe engineered with Claude Opus 4.6. Don't come for me.**
 
 [![Rust Edition](https://img.shields.io/badge/Rust-2024-orange?logo=rust)](https://www.rust-lang.org/)
 [![CI](https://img.shields.io/github/actions/workflow/status/benwelker/terse/ci.yml?branch=master&label=CI&logo=github)](https://github.com/benwelker/terse/actions/workflows/ci.yml)
@@ -10,6 +10,33 @@
 [![Smart%20Path](https://img.shields.io/badge/smart_path-ollama%20opt--in-lightgrey)](#smart-path-setup-ollama)
 
 terse is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
+
+## Table of contents
+
+- [Installation](#installation)
+  - [One-liner install (recommended)](#one-liner-install-recommended)
+  - [From source](#from-source)
+- [Quick start](#quick-start)
+- [What it does](#what-it-does)
+- [Current implemented scope](#current-implemented-scope)
+  - [Fast path optimizers](#fast-path-optimizers)
+  - [Smart path](#smart-path)
+  - [Safety gates](#safety-gates)
+- [Architecture overview](#architecture-overview)
+- [Hook setup (manual / from-source builds)](#hook-setup-manual--from-source-builds)
+- [CLI usage](#cli-usage)
+  - [Core](#core)
+  - [Analytics](#analytics)
+  - [Diagnostics](#diagnostics)
+  - [Installation management](#installation-management)
+  - [Config management](#config-management)
+  - [Web dashboard](#web-dashboard)
+- [Smart path setup (Ollama)](#smart-path-setup-ollama)
+- [Configuration](#configuration)
+- [Runtime files](#runtime-files)
+- [Development](#development)
+- [Web dashboard](#web-dashboard-1)
+- [Status](#status)
 
 ## Installation
 
@@ -37,15 +64,14 @@ Both scripts will:
 4. Check for Ollama availability (optional, for Smart Path)
 5. Register the PreToolUse hook in `~/.claude/settings.json`
 
-To uninstall:
+To update or uninstall:
 
 ```bash
-# macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/scripts/uninstall.sh | bash
-
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/benwelker/terse/master/scripts/uninstall.ps1 | iex
+terse update              # update to latest release
+terse uninstall           # remove hook, PATH, and all files
 ```
+
+Uninstall accepts `--keep-data` to preserve config and logs.
 
 ### From source
 
@@ -190,6 +216,16 @@ terse discover [--format table|json|csv] [--days N]
 ```bash
 terse health
 terse test <command>
+```
+
+### Installation management
+
+```bash
+terse update                         # update to latest GitHub release
+terse update --force                 # skip confirmation prompt
+terse uninstall                      # remove hook, PATH, and all files
+terse uninstall --keep-data          # preserve config and logs
+terse uninstall --force              # skip confirmation prompt
 ```
 
 ### Config management

@@ -79,6 +79,21 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:9746")]
         addr: String,
     },
+    /// Uninstall terse: remove hook, PATH entry, and all files
+    Uninstall {
+        /// Preserve config and log files in ~/.terse/
+        #[arg(long)]
+        keep_data: bool,
+        /// Skip confirmation prompt
+        #[arg(long, short)]
+        force: bool,
+    },
+    /// Update terse to the latest release from GitHub
+    Update {
+        /// Skip confirmation prompt
+        #[arg(long, short)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -135,5 +150,7 @@ fn main() -> Result<()> {
             ConfigAction::Reset => cli::run_config_reset(),
         },
         Commands::Web { addr } => web::serve(&addr),
+        Commands::Uninstall { keep_data, force } => cli::run_self_uninstall(keep_data, force),
+        Commands::Update { force } => cli::run_self_update(force),
     }
 }
