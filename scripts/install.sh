@@ -243,9 +243,9 @@ except:
     settings = {}
 hooks = settings.setdefault('hooks', {})
 pre = hooks.setdefault('PreToolUse', [])
-# New matcher-based format
+# Matcher-based format: 'Bash' matches the BashTool
 entry = {
-    'matcher': {},
+    'matcher': 'Bash',
     'hooks': [{'type': 'command', 'command': '$HOOK_CMD'}]
 }
 pre.append(entry)
@@ -265,7 +265,7 @@ else
         python3 -c "
 import json
 entry = {
-    'matcher': {},
+    'matcher': 'Bash',
     'hooks': [{'type': 'command', 'command': '$HOOK_CMD'}]
 }
 settings = {'hooks': {'PreToolUse': [entry]}}
@@ -288,7 +288,7 @@ if [ ! -f "$CLAUDE_SETTINGS" ] || ! grep -q "terse.*hook" "$CLAUDE_SETTINGS" 2>/
       "hooks": {
         "PreToolUse": [
           {
-            "matcher": {},
+            "matcher": "Bash",
             "hooks": [
               { "type": "command", "command": "$HOOK_CMD" }
             ]

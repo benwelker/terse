@@ -88,7 +88,17 @@ if (Test-Path $CLAUDE_SETTINGS) {
 
             $original = $settings.hooks.PreToolUse
             $filtered = @($original | Where-Object {
-                $_.command -notlike "*terse*hook*"
+                $dominated = $false
+                # New matcher-based format
+                if ($_.PSObject.Properties.Name.Contains("hooks")) {
+                    $terseHooks = @($_.hooks | Where-Object { $_.command -like "*terse*hook*" })
+                    if ($terseHooks.Count -gt 0) { $dominated = $true }
+                }
+                # Legacy flat format
+                elseif ($_.command -like "*terse*hook*") {
+                    $dominated = $true
+                }
+                -not $dominated
             })
 
             if ($filtered.Count -lt @($original).Count) {

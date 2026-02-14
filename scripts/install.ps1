@@ -203,17 +203,29 @@ try {
         $settings.hooks | Add-Member -NotePropertyName "PreToolUse" -NotePropertyValue @()
     }
 
-    # Check if hook already registered
+    # Check if hook already registered (handle both old and new formats)
     $existing = $settings.hooks.PreToolUse | Where-Object {
-        $_.command -like "*terse*hook*"
+        # New matcher-based format
+        if ($_.PSObject.Properties.Name.Contains("hooks")) {
+            $_.hooks | Where-Object { $_.command -like "*terse*hook*" }
+        }
+        # Legacy flat format
+        elseif ($_.command -like "*terse*hook*") {
+            $true
+        }
     }
 
     if ($existing) {
         Write-Ok "Hook already registered in Claude settings"
     } else {
         $hook = [PSCustomObject]@{
-            type    = "command"
-            command = $hookCommand
+            matcher = "Bash"
+            hooks   = @(
+                [PSCustomObject]@{
+                    type    = "command"
+                    command = $hookCommand
+                }
+            )
         }
         $settings.hooks.PreToolUse += $hook
         $settings | ConvertTo-Json -Depth 10 | Set-Content $CLAUDE_SETTINGS -Encoding UTF8
@@ -226,7 +238,12 @@ try {
     {
       "hooks": {
         "PreToolUse": [
-          { "type": "command", "command": "$hookCommand" }
+          {
+            "matcher": "Bash",
+            "hooks": [
+              { "type": "command", "command": "$hookCommand" }
+            ]
+          }
         ]
       }
     }
