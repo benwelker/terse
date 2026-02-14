@@ -1,4 +1,4 @@
-# TERSE
+# terse
 
 **🌈 99.9% vibe coded with Claude Opus 4.6. Don't come for me.**
 
@@ -9,9 +9,7 @@
 [![CLI](https://img.shields.io/badge/type-CLI-informational)](#cli-usage)
 [![Smart%20Path](https://img.shields.io/badge/smart_path-ollama%20opt--in-lightgrey)](#smart-path-setup-ollama)
 
-**Token Efficiency through Refined Stream Engineering**
-
-TERSE is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
+terse is a Rust CLI that intercepts shell commands from Claude Code hooks, runs them through an optimization pipeline, and returns compact output designed to reduce token usage while preserving key signal.
 
 ## Quick demo
 
@@ -33,7 +31,7 @@ terse stats
 Example `terse test git status` (shape):
 
 ```text
-TERSE Optimization Preview
+terse Optimization Preview
 ==================================================
 	Command:       git status
 	Hook decision: rewrite
@@ -142,7 +140,7 @@ Binary path after release build:
 
 ## Hook setup (Claude Code)
 
-Add a PreToolUse hook entry to your Claude settings file (`~/.claude/settings.json`), pointing to your TERSE binary.
+Add a PreToolUse hook entry to your Claude settings file (`~/.claude/settings.json`), pointing to your terse binary.
 
 Example (Windows):
 
@@ -230,7 +228,7 @@ ollama_url = "http://localhost:11434"
 
 ## Configuration
 
-Config hierarchy used by TERSE:
+Config hierarchy used by terse:
 
 1. Built-in defaults
 2. Global config: `~/.terse/config.toml`
@@ -279,7 +277,7 @@ TERSE_TEST_LLM=1 cargo test llm_live
 
 ## Web dashboard
 
-TERSE ships with a built-in web dashboard — a single-page app compiled into the binary with zero external dependencies.
+terse ships with a built-in web dashboard — a single-page app compiled into the binary with zero external dependencies.
 
 ```bash
 terse web
@@ -298,6 +296,6 @@ The server is synchronous (`tiny_http`), single-threaded, and binds to localhost
 
 This repository is an actively evolving implementation. The long-range roadmap and phase plan are tracked in:
 
-- `.claude/plans/TERSE-FINAL-Plan.md`
+- `.claude/plans/terse-FINAL-Plan.md`
 
 Current codebase already includes hook integration, router, preprocessing pipeline, Git optimizer, LLM smart path integration, analytics commands, TOML-based configuration management, web dashboard, cross-platform support, and CI/CD workflows.
