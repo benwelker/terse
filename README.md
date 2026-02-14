@@ -110,13 +110,13 @@ Downloads the latest release binary, places it in `~/.terse/bin/`, creates a def
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/benwelker/terse/master/install.ps1 | iex
+irm https://raw.githubusercontent.com/benwelker/terse/master/scripts/install.ps1 | iex
 ```
 
 Both scripts will:
