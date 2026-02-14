@@ -69,30 +69,53 @@ struct Run<'a> {
     lines: Vec<&'a str>,
 }
 
+/// Returns true if a line is a terse pipeline marker that should not be
+/// merged into deduplication runs (e.g. `[... N bytes pre-truncated ...]`).
+fn is_marker_line(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with("[...") && t.ends_with("...]")
+}
+
 /// Detect runs of similar consecutive lines.
+///
+/// Pre-computes all pattern keys in a single pass so that each line's key
+/// is computed exactly once — the previous implementation recomputed the key
+/// for every run-breaking line.
+///
+/// Lines that look like terse pipeline markers (`[... ...]`) are treated as
+/// run-breakers so they always appear in the output.
 fn detect_runs(text: &str) -> Vec<Run<'_>> {
     let lines: Vec<&str> = text.lines().collect();
+    // Pre-compute all pattern keys (one allocation per line, but only once)
+    let keys: Vec<String> = lines.iter().map(|l| pattern_key(l)).collect();
     let mut runs: Vec<Run<'_>> = Vec::new();
 
     let mut i = 0;
     while i < lines.len() {
-        let key = pattern_key(lines[i]);
-        let mut run_lines = vec![lines[i]];
-
-        // Collect consecutive lines with the same key
-        while i + run_lines.len() < lines.len() {
-            let next_key = pattern_key(lines[i + run_lines.len()]);
-            if next_key == key && !key.is_empty() {
-                run_lines.push(lines[i + run_lines.len()]);
-            } else {
-                break;
-            }
+        // Marker lines emit as a single-line run to prevent merging
+        if is_marker_line(lines[i]) {
+            runs.push(Run {
+                key: String::new(), // empty key → always emitted verbatim
+                lines: vec![lines[i]],
+            });
+            i += 1;
+            continue;
         }
 
-        i += run_lines.len();
+        let start = i;
+        i += 1;
+        // Extend run while consecutive keys match, key is non-empty,
+        // and the next line is not a marker.
+        while i < lines.len()
+            && !keys[start].is_empty()
+            && keys[i] == keys[start]
+            && !is_marker_line(lines[i])
+        {
+            i += 1;
+        }
         runs.push(Run {
-            key,
-            lines: run_lines,
+            key: keys[start].clone(),
+            lines: lines[start..i].to_vec(),
         });
     }
 

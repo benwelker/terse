@@ -463,7 +463,7 @@ ollama_url = "http://localhost:11434"
 
 [output_thresholds]
 passthrough_below_bytes = 2048        # < 2 KB  -> passthrough
-smart_path_above_bytes = 10240        # >= 10 KB -> smart path eligible
+smart_path_above_bytes = 20480        # >= 20 KB -> smart path eligible
 
 [preprocessing]
 enabled = true

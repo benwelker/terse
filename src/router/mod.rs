@@ -77,6 +77,12 @@ pub struct ExecutionResult {
     pub preprocessing_bytes_removed: Option<usize>,
     /// Percentage of bytes removed by preprocessing.
     pub preprocessing_pct: Option<f64>,
+    /// Wall-clock time spent in the preprocessing pipeline (milliseconds).
+    pub preprocessing_duration_ms: Option<u64>,
+    /// Token count before preprocessing.
+    pub preprocessing_tokens_before: Option<usize>,
+    /// Token count after preprocessing.
+    pub preprocessing_tokens_after: Option<usize>,
     /// Diagnostic: error from a higher-priority path that was attempted but
     /// failed before falling through to the current path.
     pub fallback_reason: Option<String>,
@@ -170,12 +176,16 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
     // --- Step 1: Run the original command ---
     let raw_output = run_shell_command(command).context("failed executing command in router")?;
     let raw_text = combine_stdout_stderr(&raw_output.stdout, &raw_output.stderr);
+    let raw_bytes = raw_text.len();
     let raw_tokens = estimate_tokens(&raw_text);
 
-    // --- Step 2: Preprocess output (always) ---
+    // --- Step 2: Preprocess output ---
     let preprocessed = preprocessing::preprocess(&raw_text, command);
     let pp_bytes_removed = preprocessed.bytes_removed;
     let pp_pct = preprocessed.reduction_pct;
+    let pp_duration_ms = preprocessed.duration_ms;
+    let pp_tokens_before = preprocessed.tokens_before;
+    let pp_tokens_after = preprocessed.tokens_after;
     let output_bytes = preprocessed.text.len();
 
     // --- Step 3: Size-based path decision ---
@@ -192,6 +202,9 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
             latency_ms: None,
             preprocessing_bytes_removed: Some(pp_bytes_removed),
             preprocessing_pct: Some(pp_pct),
+            preprocessing_duration_ms: Some(pp_duration_ms),
+            preprocessing_tokens_before: Some(pp_tokens_before),
+            preprocessing_tokens_after: Some(pp_tokens_after),
             fallback_reason: None,
         });
     }
@@ -216,16 +229,22 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         match llm::optimize_with_llm(command, &preprocessed.text) {
             Ok(llm_result) => {
                 cb.record_success(PathId::SmartPath);
+                let output = append_truncation_footer(
+                    &llm_result.output, raw_bytes,
+                );
                 return Ok(ExecutionResult {
                     original_tokens: raw_tokens,
                     optimized_tokens: llm_result.optimized_tokens,
                     path: OptimizationPath::SmartPath,
                     optimizer_name: format!("llm:{}", llm_result.model),
-                    output: llm_result.output,
+                    output,
                     stderr: String::new(),
                     latency_ms: Some(llm_result.latency_ms),
                     preprocessing_bytes_removed: Some(pp_bytes_removed),
                     preprocessing_pct: Some(pp_pct),
+                    preprocessing_duration_ms: Some(pp_duration_ms),
+                    preprocessing_tokens_before: Some(pp_tokens_before),
+                    preprocessing_tokens_after: Some(pp_tokens_after),
                     fallback_reason: None,
                 });
             }
@@ -245,22 +264,29 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
     // thresholds). Also serves as a fallback when the smart path is
     // unavailable or fails for large outputs.
     if *mode != Mode::SmartOnly
+        && cfg.fast_path.enabled
         && cb.is_allowed(PathId::FastPath)
         && registry.can_handle(command)
     {
         match registry.optimize_first(command, &preprocessed.text) {
             Some(result) => {
                 cb.record_success(PathId::FastPath);
+                let output = append_truncation_footer(
+                    &result.output, raw_bytes,
+                );
                 return Ok(ExecutionResult {
                     original_tokens: raw_tokens,
                     optimized_tokens: result.optimized_tokens,
                     path: OptimizationPath::FastPath,
                     optimizer_name: result.optimizer_used,
-                    output: result.output,
+                    output,
                     stderr: String::new(),
                     latency_ms: None,
                     preprocessing_bytes_removed: Some(pp_bytes_removed),
                     preprocessing_pct: Some(pp_pct),
+                    preprocessing_duration_ms: Some(pp_duration_ms),
+                    preprocessing_tokens_before: Some(pp_tokens_before),
+                    preprocessing_tokens_after: Some(pp_tokens_after),
                     fallback_reason: smart_path_error,
                 });
             }
@@ -272,16 +298,20 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
     }
 
     // --- Passthrough (no optimizer matched, or paths failed/disabled) ---
+    let output = append_truncation_footer(&raw_output.stdout, raw_bytes);
     Ok(ExecutionResult {
         original_tokens: raw_tokens,
         optimized_tokens: raw_tokens,
         path: OptimizationPath::Passthrough,
         optimizer_name: "passthrough".to_string(),
-        output: raw_output.stdout,
+        output,
         stderr: raw_output.stderr,
         latency_ms: None,
         preprocessing_bytes_removed: Some(pp_bytes_removed),
         preprocessing_pct: Some(pp_pct),
+        preprocessing_duration_ms: Some(pp_duration_ms),
+        preprocessing_tokens_before: Some(pp_tokens_before),
+        preprocessing_tokens_after: Some(pp_tokens_after),
         fallback_reason: smart_path_error,
     })
 }
@@ -321,6 +351,27 @@ pub fn preview(command: &str) -> Result<PreviewResult> {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/// Append a truncation footer to output when the final output is
+/// significantly smaller than the raw command output. This is applied in the
+/// router *after* the optimizer produces its final output so Claude knows
+/// the output was reduced — regardless of whether preprocessing is enabled
+/// or which optimization path was taken.
+fn append_truncation_footer(output: &str, raw_bytes: usize) -> String {
+    let output_bytes = output.len();
+    if raw_bytes == 0 || output_bytes >= raw_bytes {
+        return output.to_string();
+    }
+    let removed = raw_bytes - output_bytes;
+    let mut pct = (removed as f64 / raw_bytes as f64) * 100.0;
+    // Cap at 99.9% when output is non-empty — 100.0% would be misleading.
+    if output_bytes > 0 && pct >= 100.0 {
+        pct = 99.9;
+    }
+    format!(
+        "{output}[output truncated: showing {output_bytes} of {raw_bytes} bytes ({pct:.2}% removed)]"
+    )
+}
 
 /// Combine stdout and stderr into a single string for token counting.
 fn combine_stdout_stderr(stdout: &str, stderr: &str) -> String {

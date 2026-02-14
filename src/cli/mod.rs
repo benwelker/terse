@@ -551,22 +551,50 @@ pub fn run_test(command: &str) -> Result<()> {
     // Preprocessing stats
     if let Some(pp_bytes) = preview.execution.preprocessing_bytes_removed {
         let pp_pct = preview.execution.preprocessing_pct.unwrap_or(0.0);
+        let pp_duration = preview.execution.preprocessing_duration_ms.unwrap_or(0);
         println!(
-            "  {} {} bytes removed ({:.1}%)",
+            "  {} {} bytes removed ({:.1}%) in {}ms",
             "Preprocessing:".bold(),
             pp_bytes,
             pp_pct,
+            pp_duration,
         );
     }
 
-    let savings = if preview.execution.original_tokens == 0 {
+    // Preprocessing token savings
+    if let (Some(tok_before), Some(tok_after)) = (
+        preview.execution.preprocessing_tokens_before,
+        preview.execution.preprocessing_tokens_after,
+    ) {
+        let pp_tok_savings = if tok_before == 0 {
+            0.0
+        } else {
+            let saved = tok_before.saturating_sub(tok_after);
+            (saved as f64 / tok_before as f64) * 100.0
+        };
+        println!(
+            "  {} {} → {} ({:.1}% savings)",
+            "PP tokens:    ".bold(),
+            tok_before,
+            tok_after,
+            pp_tok_savings,
+        );
+    }
+
+    // Token savings: use preprocessed token count as the baseline so the
+    // "Tokens" line reflects only what the optimizer path achieved on top
+    // of preprocessing. Falls back to original_tokens when preprocessing
+    // metadata is unavailable.
+    let tokens_baseline = preview
+        .execution
+        .preprocessing_tokens_after
+        .unwrap_or(preview.execution.original_tokens);
+
+    let savings = if tokens_baseline == 0 {
         0.0
     } else {
-        let saved = preview
-            .execution
-            .original_tokens
-            .saturating_sub(preview.execution.optimized_tokens);
-        (saved as f64 / preview.execution.original_tokens as f64) * 100.0
+        let saved = tokens_baseline.saturating_sub(preview.execution.optimized_tokens);
+        (saved as f64 / tokens_baseline as f64) * 100.0
     };
 
     // Use enough decimal places to avoid "100.0%" when savings are very
@@ -580,7 +608,7 @@ pub fn run_test(command: &str) -> Result<()> {
     println!(
         "  {} {} → {} ({:.2}% savings)",
         "Tokens:       ".bold(),
-        preview.execution.original_tokens,
+        tokens_baseline,
         preview.execution.optimized_tokens,
         savings_display,
     );

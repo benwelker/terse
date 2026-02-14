@@ -4,6 +4,8 @@
 //! This is Stage 1 of the preprocessing pipeline and typically provides the
 //! largest byte-reduction for build/test outputs.
 
+use std::borrow::Cow;
+
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -91,6 +93,12 @@ fn is_progress_line(line: &str) -> bool {
         return true;
     }
 
+    // Fast exit: progress patterns require '%' or '['. Skip the regex
+    // entirely when neither character is present.
+    if !trimmed.contains('%') && !trimmed.contains('[') {
+        return false;
+    }
+
     // Lines that are *only* a progress bar (no other meaningful content)
     if PROGRESS_RE.is_match(trimmed) && trimmed.len() < 120 {
         // Heuristic: if the line is short and dominated by the progress
@@ -116,8 +124,16 @@ pub fn strip_noise(raw: &str) -> String {
     let mut result = String::with_capacity(raw.len());
 
     for line in raw.lines() {
-        // Step 1: strip ANSI escape sequences
-        let clean = ANSI_RE.replace_all(line, "");
+        // Step 1: strip ANSI escape sequences — only run the regex when the
+        // line actually contains an ESC byte. For most command outputs (git
+        // log, build output) the vast majority of lines contain no ANSI
+        // codes, and a byte scan is orders of magnitude cheaper than
+        // executing the regex automaton.
+        let clean: Cow<'_, str> = if line.contains('\x1b') {
+            ANSI_RE.replace_all(line, "")
+        } else {
+            Cow::Borrowed(line)
+        };
         let trimmed = clean.trim_start();
 
         // Step 2: skip boilerplate lines

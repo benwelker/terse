@@ -28,6 +28,7 @@ pub fn execute(command: &str) -> Result<()> {
         result.latency_ms,
         result.preprocessing_bytes_removed,
         result.preprocessing_pct,
+        result.preprocessing_duration_ms,
     );
 
     std::io::stdout()

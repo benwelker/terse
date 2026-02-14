@@ -328,6 +328,7 @@ mod tests {
                 latency_ms: None,
                 preprocessing_bytes_removed: None,
                 preprocessing_pct: None,
+                preprocessing_duration_ms: None,
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:05:00+00:00".to_string(),
@@ -341,6 +342,7 @@ mod tests {
                 latency_ms: None,
                 preprocessing_bytes_removed: None,
                 preprocessing_pct: None,
+                preprocessing_duration_ms: None,
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:10:00+00:00".to_string(),
@@ -354,6 +356,7 @@ mod tests {
                 latency_ms: Some(1500),
                 preprocessing_bytes_removed: Some(500),
                 preprocessing_pct: Some(25.0),
+                preprocessing_duration_ms: None,
             },
             CommandLogEntry {
                 timestamp: "2025-01-15T10:15:00+00:00".to_string(),
@@ -367,6 +370,7 @@ mod tests {
                 latency_ms: None,
                 preprocessing_bytes_removed: None,
                 preprocessing_pct: None,
+                preprocessing_duration_ms: None,
             },
         ]
     }

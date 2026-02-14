@@ -24,6 +24,11 @@ pub mod path_filter;
 pub mod trim;
 pub mod truncation;
 
+use std::borrow::Cow;
+use std::time::Instant;
+
+use crate::utils::token_counter::estimate_tokens;
+
 // ---------------------------------------------------------------------------
 // Pipeline output
 // ---------------------------------------------------------------------------
@@ -40,6 +45,12 @@ pub struct PreprocessedOutput {
     pub bytes_removed: usize,
     /// Percentage of bytes removed (0.0–100.0).
     pub reduction_pct: f64,
+    /// Wall-clock time spent in the preprocessing pipeline (milliseconds).
+    pub duration_ms: u64,
+    /// Token count of the original (raw) input before preprocessing.
+    pub tokens_before: usize,
+    /// Token count of the preprocessed output.
+    pub tokens_after: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +70,22 @@ pub struct PreprocessedOutput {
 /// heuristics) but may be unused in early stages.
 pub fn preprocess(raw: &str, _command: &str) -> PreprocessedOutput {
     let cfg = crate::config::load();
+
+    // If preprocessing is disabled, return the raw input unchanged with
+    // only timing and token metadata populated.
+    if !cfg.preprocessing.enabled {
+        let tokens = estimate_tokens(raw);
+        return PreprocessedOutput {
+            text: raw.to_string(),
+            original_bytes: raw.len(),
+            bytes_removed: 0,
+            reduction_pct: 0.0,
+            duration_ms: 0,
+            tokens_before: tokens,
+            tokens_after: tokens,
+        };
+    }
+
     let max_bytes = cfg.preprocessing.max_output_bytes;
     preprocess_with_max(raw, _command, max_bytes)
 }
@@ -67,10 +94,27 @@ pub fn preprocess(raw: &str, _command: &str) -> PreprocessedOutput {
 ///
 /// Primarily used by tests.
 pub fn preprocess_with_max(raw: &str, _command: &str, max_bytes: usize) -> PreprocessedOutput {
+    let start = Instant::now();
     let original_bytes = raw.len();
+    let tokens_before = estimate_tokens(raw);
+
+    // Stage 0: pre-truncation
+    //
+    // If the input vastly exceeds the final truncation budget, do a fast
+    // byte-level head+tail cut *before* running expensive per-line stages.
+    // This is purely a performance optimization — Stage 4 enforces the
+    // exact limit. Without this, multi-megabyte outputs force regex,
+    // path-filtering, and deduplication to process 10–50x more data than
+    // will survive.
+    let pre_cut_budget = max_bytes.saturating_mul(8).max(512 * 1024);
+    let working_text: Cow<'_, str> = if original_bytes > pre_cut_budget {
+        Cow::Owned(fast_precut(raw, pre_cut_budget))
+    } else {
+        Cow::Borrowed(raw)
+    };
 
     // Stage 1: noise removal
-    let text = noise::strip_noise(raw);
+    let text = noise::strip_noise(&working_text);
 
     // Stage 2: path filtering
     let text = path_filter::filter_paths(&text);
@@ -84,6 +128,8 @@ pub fn preprocess_with_max(raw: &str, _command: &str, max_bytes: usize) -> Prepr
     // Stage 5: trim / whitespace normalization
     let text = trim::normalize_whitespace(&text);
 
+    let duration_ms = start.elapsed().as_millis() as u64;
+    let tokens_after = estimate_tokens(&text);
     let bytes_removed = original_bytes.saturating_sub(text.len());
     let reduction_pct = if original_bytes == 0 {
         0.0
@@ -96,7 +142,66 @@ pub fn preprocess_with_max(raw: &str, _command: &str, max_bytes: usize) -> Prepr
         original_bytes,
         bytes_removed,
         reduction_pct,
+        duration_ms,
+        tokens_before,
+        tokens_after,
     }
+}
+
+// ---------------------------------------------------------------------------
+// Pre-truncation helper
+// ---------------------------------------------------------------------------
+
+/// Fast byte-level pre-truncation preserving line boundaries.
+///
+/// Keeps the first half and last half of the budget, splitting at newline
+/// boundaries. Used when the raw input vastly exceeds the final truncation
+/// budget to avoid processing megabytes through expensive per-line stages.
+fn fast_precut(raw: &str, budget: usize) -> String {
+    debug_assert!(raw.len() > budget);
+
+    let half = budget / 2;
+
+    // Head: find last newline within the first `half` bytes.
+    let head_end = raw
+        .get(..half)
+        .and_then(|s| s.rfind('\n'))
+        .map(|pos| pos + 1)
+        .unwrap_or_else(|| {
+            // No newline found or slice not at char boundary — find nearest
+            // char boundary.
+            let mut end = half.min(raw.len());
+            while end > 0 && !raw.is_char_boundary(end) {
+                end -= 1;
+            }
+            end
+        });
+
+    // Tail: find first newline after `raw.len() - half`.
+    let tail_search = raw.len().saturating_sub(half);
+    let mut tail_boundary = tail_search;
+    while tail_boundary < raw.len() && !raw.is_char_boundary(tail_boundary) {
+        tail_boundary += 1;
+    }
+    let tail_start = raw
+        .get(tail_boundary..)
+        .and_then(|s| s.find('\n'))
+        .map(|pos| tail_boundary + pos + 1)
+        .unwrap_or(tail_boundary);
+
+    // Ensure head and tail don't overlap
+    if head_end >= tail_start {
+        return raw.to_string();
+    }
+
+    let omitted = tail_start - head_end;
+    let mut result = String::with_capacity(head_end + (raw.len() - tail_start) + 80);
+    result.push_str(&raw[..head_end]);
+    result.push_str("\n[... ");
+    result.push_str(&omitted.to_string());
+    result.push_str(" bytes pre-truncated ...]\n\n");
+    result.push_str(&raw[tail_start..]);
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -109,7 +214,7 @@ mod tests {
 
     #[test]
     fn empty_input_returns_empty() {
-        let result = preprocess("", "test");
+        let result = preprocess_with_max("", "test", 128 * 1024);
         assert!(result.text.is_empty());
         assert_eq!(result.original_bytes, 0);
         assert_eq!(result.bytes_removed, 0);
@@ -118,7 +223,7 @@ mod tests {
     #[test]
     fn small_clean_input_is_mostly_unchanged() {
         let input = "hello world\n";
-        let result = preprocess(input, "echo hello");
+        let result = preprocess_with_max(input, "echo hello", 128 * 1024);
         assert_eq!(result.text, "hello world");
         assert!(result.reduction_pct < 20.0);
     }
@@ -134,7 +239,7 @@ mod tests {
         }
         input.push_str("\ntest result: ok. 100 passed; 0 failed\n");
 
-        let result = preprocess(&input, "cargo test");
+        let result = preprocess_with_max(&input, "cargo test", 128 * 1024);
         // Should be significantly smaller
         assert!(
             result.reduction_pct > 30.0,

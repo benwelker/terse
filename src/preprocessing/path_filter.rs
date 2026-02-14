@@ -50,9 +50,13 @@ const NOISE_DIR_SEGMENTS: &[&str] = &[
 /// Returns `true` if a line looks like a file-path line belonging to a noise
 /// directory.
 ///
-/// Heuristic: the line (after trimming) is either:
-/// - A file path containing one of the noise segments, OR
-/// - A tree-style listing (e.g. `│   ├── node_modules/...`)
+/// Heuristic: the line (after trimming) contains one of the well-known noise
+/// directory segments.
+///
+/// Tree-drawing characters (│ ├ └ ─ etc.) are all multi-byte UTF-8 sequences
+/// that cannot overlap with the ASCII characters in noise segments, so they
+/// do not affect matching and can be left in place — eliminating a costly
+/// per-line `String` allocation.
 fn is_noise_path_line(line: &str) -> bool {
     let trimmed = line.trim();
 
@@ -61,19 +65,19 @@ fn is_noise_path_line(line: &str) -> bool {
         return false;
     }
 
-    // Strip tree-drawing characters (│ ├ └ ─ etc.) to get the bare path
-    let bare: String = trimmed
-        .chars()
-        .filter(|c| !matches!(c, '│' | '├' | '└' | '─' | '┬' | '┤' | '┌' | '┐' | '┘' | '┴'))
-        .collect();
-    let bare = bare.trim();
-
-    // Normalize backslashes → forward slashes for matching
-    let normalized = bare.replace('\\', "/");
-
-    NOISE_DIR_SEGMENTS
-        .iter()
-        .any(|seg| normalized.contains(seg))
+    // Normalize backslashes for cross-platform matching only when
+    // backslashes are actually present — avoids a `String` allocation
+    // on the overwhelmingly common forward-slash / no-slash case.
+    if trimmed.contains('\\') {
+        let normalized = trimmed.replace('\\', "/");
+        NOISE_DIR_SEGMENTS
+            .iter()
+            .any(|seg| normalized.contains(seg))
+    } else {
+        NOISE_DIR_SEGMENTS
+            .iter()
+            .any(|seg| trimmed.contains(seg))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,27 +89,30 @@ fn is_noise_path_line(line: &str) -> bool {
 /// Consecutive lines that reference noise directories are collapsed into a
 /// single summary line. Non-noise lines pass through unchanged.
 pub fn filter_paths(text: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
     let mut result = String::with_capacity(text.len());
+    let mut noise_count: usize = 0;
 
-    let mut i = 0;
-    while i < lines.len() {
-        if is_noise_path_line(lines[i]) {
-            // Count consecutive noise lines
-            let start = i;
-            while i < lines.len() && is_noise_path_line(lines[i]) {
-                i += 1;
-            }
-            let count = i - start;
-            // Emit a single summary line
-            result.push_str(&format!(
-                "[{count} path(s) in noise directories filtered]\n"
-            ));
+    for line in text.lines() {
+        if is_noise_path_line(line) {
+            noise_count += 1;
         } else {
-            result.push_str(lines[i]);
+            // Flush any accumulated noise run before emitting the clean line
+            if noise_count > 0 {
+                result.push('[');
+                result.push_str(&noise_count.to_string());
+                result.push_str(" path(s) in noise directories filtered]\n");
+                noise_count = 0;
+            }
+            result.push_str(line);
             result.push('\n');
-            i += 1;
         }
+    }
+
+    // Flush trailing noise run
+    if noise_count > 0 {
+        result.push('[');
+        result.push_str(&noise_count.to_string());
+        result.push_str(" path(s) in noise directories filtered]\n");
     }
 
     result

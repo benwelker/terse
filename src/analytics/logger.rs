@@ -38,6 +38,9 @@ pub struct CommandLogEntry {
     /// Percentage of bytes removed by preprocessing (only set for smart-path calls).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub preprocessing_pct: Option<f64>,
+    /// Wall-clock time spent in the preprocessing pipeline (milliseconds).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub preprocessing_duration_ms: Option<u64>,
 }
 
 fn default_true() -> bool {
@@ -76,6 +79,7 @@ pub fn log_command_result(
         None,
         None,
         None,
+        None,
     )
 }
 
@@ -100,6 +104,7 @@ pub fn log_command_result_with_latency(
         latency_ms,
         None,
         None,
+        None,
     )
 }
 
@@ -115,6 +120,7 @@ pub fn log_command_result_full(
     latency_ms: Option<u64>,
     preprocessing_bytes_removed: Option<usize>,
     preprocessing_pct: Option<f64>,
+    preprocessing_duration_ms: Option<u64>,
 ) {
     let savings_pct = if original_tokens == 0 {
         0.0
@@ -134,6 +140,7 @@ pub fn log_command_result_full(
         latency_ms,
         preprocessing_bytes_removed,
         preprocessing_pct,
+        preprocessing_duration_ms,
     };
 
     let _ = append_log_entry(&entry);
