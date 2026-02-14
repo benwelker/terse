@@ -99,7 +99,33 @@ Never optimized:
 4. Router preprocesses output and selects path based on config + output size
 5. Optimized output is printed to stdout and logged
 
-## Installation (from source)
+## Installation
+
+### One-liner install (recommended)
+
+Downloads the latest release binary, places it in `~/.terse/bin/`, creates a default config, and registers the Claude Code hook automatically.
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bwelker/terse/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/bwelker/terse/main/install.ps1 | iex
+```
+
+Both scripts will:
+
+1. Download the correct binary for your platform/architecture
+2. Place it in `~/.terse/bin/`
+3. Generate a default `~/.terse/config.toml`
+4. Check for Ollama availability
+5. Register the PreToolUse hook in `~/.claude/settings.json`
+
+### From source
 
 ```bash
 git clone https://github.com/bwelker/terse.git
@@ -167,6 +193,13 @@ terse config show
 terse config init [--force]
 terse config set <dotted.key> <value>
 terse config reset
+```
+
+### Web dashboard
+
+```bash
+terse web                          # opens http://127.0.0.1:9746
+terse web --addr 0.0.0.0:8080      # custom bind address
 ```
 
 ## Smart path setup (Ollama)
@@ -242,10 +275,27 @@ Live LLM integration tests (requires Ollama running):
 TERSE_TEST_LLM=1 cargo test llm_live
 ```
 
+## Web dashboard
+
+TERSE ships with a built-in web dashboard — a single-page app compiled into the binary with zero external dependencies.
+
+```bash
+terse web
+```
+
+Opens `http://127.0.0.1:9746` in your default browser and serves:
+
+- **Dashboard** — total commands, token savings, path distribution bar, top commands table
+- **Trends** — daily bar chart of token savings over the last 30 days
+- **Discovery** — passthrough/smart-path commands that could benefit from new fast-path optimizers
+- **Configuration** — form-based editor for all key settings, saving directly to `~/.terse/config.toml`
+
+The server is synchronous (`tiny_http`), single-threaded, and binds to localhost only by default. Override with `--addr`.
+
 ## Status
 
 This repository is an actively evolving implementation. The long-range roadmap and phase plan are tracked in:
 
 - `.claude/plans/TERSE-FINAL-Plan.md`
 
-Current codebase already includes hook integration, router, preprocessing pipeline, Git optimizer, LLM smart path integration, analytics commands, and TOML-based configuration management.
+Current codebase already includes hook integration, router, preprocessing pipeline, Git optimizer, LLM smart path integration, analytics commands, TOML-based configuration management, web dashboard, cross-platform support, and CI/CD workflows.

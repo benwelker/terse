@@ -13,6 +13,7 @@ mod router;
 mod run;
 mod safety;
 mod utils;
+mod web;
 
 #[derive(Debug, Parser)]
 #[command(name = "terse")]
@@ -72,6 +73,12 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Launch the web dashboard for analytics and configuration
+    Web {
+        /// Address to bind the server to
+        #[arg(long, default_value = "127.0.0.1:9746")]
+        addr: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -127,5 +134,6 @@ fn main() -> Result<()> {
             ConfigAction::Set { key, value } => cli::run_config_set(&key, &value),
             ConfigAction::Reset => cli::run_config_reset(),
         },
+        Commands::Web { addr } => web::serve(&addr),
     }
 }

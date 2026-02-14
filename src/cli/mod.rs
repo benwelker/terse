@@ -470,11 +470,7 @@ pub fn run_health() -> Result<()> {
 
     // 6. Key tool availability
     let git_ok = process::is_command_available("git");
-    print_health_item(
-        "Git",
-        git_ok,
-        if git_ok { "found" } else { "not found" },
-    );
+    print_health_item("Git", git_ok, if git_ok { "found" } else { "not found" });
 
     // 7. Binary location
     if let Some(exe) = process::current_exe_path() {
@@ -489,11 +485,7 @@ pub fn run_health() -> Result<()> {
         print_health_item(
             "Install dir",
             in_bin,
-            &format!(
-                "{}{}",
-                norm,
-                if in_bin { "" } else { " (not created)" }
-            ),
+            &format!("{}{}", norm, if in_bin { "" } else { " (not created)" }),
         );
     }
 
