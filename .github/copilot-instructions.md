@@ -4,19 +4,22 @@ TERSE (Token Efficiency through Refined Stream Engineering) is a single Rust bin
 
 ## Architecture
 
-Dual-path execution: Claude Code PreToolUse hook → `terse hook` (stdin JSON → stdout JSON) rewrites commands to `terse run "<cmd>"` → router selects Fast Path (rule-based, <20ms), Smart Path (Ollama LLM, <2s), or Passthrough.
+Execution flow: Claude Code PreToolUse hook → `terse hook` (stdin JSON → stdout JSON) rewrites commands to `terse run "<cmd>"` → router runs command, preprocesses output, then selects Fast Path (rule-based), Smart Path (Ollama LLM), or Passthrough.
 
 Key modules and their roles:
 
 - `hook/` — reads hook JSON from stdin, returns passthrough `{}` or rewrite with `hookSpecificOutput.updatedInput`
-- `router/` — central decision engine: `decide_hook()` (pre-execution) and `execute_run()` (post-execution)
-- `optimizers/` — `Optimizer` trait + `OptimizerRegistry` (Vec<Box<dyn Optimizer>>), each optimizer uses command substitution or output post-processing
+- `router/` — central decision engine: `decide_hook()` (pre-execution) and `execute_run()` (post-execution pipeline)
+- `optimizers/` — `Optimizer` trait + `OptimizerRegistry` (`git`, `file`, `build`, `docker`, `generic`) for output post-processing
 - `matching/` — `extract_core_command()` strips `cd`, env vars, subshells, `bash -c`, pipes before matching
-- `llm/` — Ollama HTTP client (`ureq`, sync), category-aware prompts, output validation, feature flag config
+- `preprocessing/` — deterministic pipeline (noise removal, path filtering, dedup, truncation, trim) before routing/optimization
+- `llm/` — Ollama HTTP client (`ureq`, sync), category-aware prompts, output validation, smart-path config
+- `config/` — layered config merge: defaults → `~/.terse/config.toml` → `.terse.toml` → `TERSE_*`
 - `safety/` — command classifier (NeverOptimize/Optimizable), per-path circuit breaker with file-backed state
 - `analytics/` — JSONL command logging to `~/.terse/command-log.jsonl`
 - `run/` — executor for `terse run` subcommand
-- `cli/` — clap-derived subcommands
+- `cli/` — clap-derived analytics/diagnostic/config commands
+- `web/` — embedded dashboard + JSON API (`terse web`)
 
 **Golden rule**: Any error → graceful passthrough (return raw output). Never break the Claude Code session.
 
@@ -57,24 +60,31 @@ pub trait Optimizer {
 }
 ```
 
-Register new optimizers in `OptimizerRegistry::new()`. Two strategies: command substitution (run a different command) or output post-processing (run original, transform result). See `src/optimizers/git.rs` for the reference implementation.
+Register new optimizers in `OptimizerRegistry::from_config()`. TERSE optimizers are output post-processors (router executes original command first, optimizer transforms output). See `src/optimizers/git.rs` for the reference implementation.
 
 **CommandContext pattern** — `extract_core_command()` runs once, producing a `CommandContext` with `original` (full command) and `core` (extracted for matching). All optimizers receive this pre-extracted context.
 
 **Hook protocol** — passthrough = `{}`, rewrite = `{ "hookSpecificOutput": { "updatedInput": { "command": "terse run ..." } } }` with `permissionDecision: "allow"`. Types in `src/hook/protocol.rs` use `#[serde(rename_all = "camelCase")]`.
 
-**Config layering** — defaults → `~/.terse/config.json` → env vars (`TERSE_SMART_PATH`, `TERSE_SMART_PATH_MODEL`, etc.). Highest wins.
+**Router pipeline** — `execute_run()` always preprocesses output first, then routes by size thresholds + mode/config/circuit-breaker gates (smart preferred for large outputs, fast fallback, passthrough otherwise).
+
+**Config layering** — defaults → `~/.terse/config.toml` → `.terse.toml` → env vars (`TERSE_MODE`, `TERSE_PROFILE`, `TERSE_SMART_PATH`, etc.). Highest wins.
 
 **Testing** — unit tests as `#[cfg(test)] mod tests` inside each source file; integration tests in `tests/` importing via `use terse::...`. Env-var-mutating tests combined into single `#[test]` to avoid race conditions.
 
 ## Implementation Status
 
-Phases 1–5 complete (hook, git optimizer, matching engine, LLM smart path, router, circuit breaker, analytics & CLI). Phases 6–12 not started. See [TERSE-FINAL-Plan.md](.claude/plans/TERSE-FINAL-Plan.md) for the full roadmap.
+Implemented today: hook routing, matching engine, preprocessing pipeline, fast-path optimizer suite (`git`, `file`, `build`, `docker`, `generic`), smart path via Ollama, circuit breaker, analytics commands, TOML configuration, and embedded web dashboard.
+
+Primary CLI surface: `hook`, `run`, `stats`, `analyze`, `discover`, `health`, `test`, `config show|init|set|reset`, `web`.
 
 ## Runtime Files
 
-- Config: `~/.terse/config.json`
+- Config: `~/.terse/config.toml`
+- Project config: `.terse.toml`
+- Legacy smart-path JSON fallback: `~/.terse/config.json`
 - Command log: `~/.terse/command-log.jsonl`
 - Event log: `~/.terse/events.jsonl`
+- Hook diagnostic log: `~/.terse/hook.log`
 - Circuit breaker: `~/.terse/circuit-breaker.json`
 - Hook registration: `~/.claude/settings.json`

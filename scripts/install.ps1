@@ -157,12 +157,11 @@ if (-not (Test-Path $CONFIG_FILE)) {
 Write-Step "Checking Ollama (optional, for Smart Path)..."
 
 $ollamaAvailable = $false
-try {
+if (Get-Command ollama -ErrorAction SilentlyContinue) {
     $ollamaVersion = & ollama --version 2>&1
     Write-Ok "Ollama found: $ollamaVersion"
     $ollamaAvailable = $true
 
-    # Check if a model is pulled
     $models = & ollama list 2>&1
     if ($models -match "llama3") {
         Write-Ok "Model available (llama3 family detected)"
@@ -170,7 +169,7 @@ try {
         Write-Warn "No llama3 model found. For Smart Path, run:"
         Write-Host "    ollama pull llama3.2:1b" -ForegroundColor DarkYellow
     }
-} catch {
+} else {
     Write-Warn "Ollama not found. Smart Path will be disabled."
     Write-Warn "Install Ollama from https://ollama.com for LLM-powered optimization."
     Write-Warn "TERSE works fine without it — rule-based optimizers are always available."
