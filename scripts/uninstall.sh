@@ -68,8 +68,24 @@ if [ "$FORCE" = false ]; then
         echo "  Use --keep-data to preserve config and log files."
     fi
     echo ""
-    printf "  Continue? [y/N] "
-    read -r confirm
+
+    # When piped (curl | bash), stdin is the script itself, so we must
+    # read the user's answer from /dev/tty.  If even that isn't available,
+    # require --force.
+    if [ -t 0 ]; then
+        # Interactive terminal — read normally
+        printf "  Continue? [y/N] "
+        read -r confirm
+    elif [ -r /dev/tty ]; then
+        # Piped execution — read from the real terminal
+        printf "  Continue? [y/N] " > /dev/tty
+        read -r confirm < /dev/tty
+    else
+        err "Non-interactive and no terminal available."
+        err "Re-run with --force:  curl ... | bash -s -- --force"
+        exit 1
+    fi
+
     case "$confirm" in
         y|Y|yes|Yes) ;;
         *)
