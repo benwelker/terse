@@ -783,9 +783,7 @@ pub fn run_self_uninstall(keep_data: bool, force: bool) -> Result<()> {
     println!();
 
     if keep_data {
-        println!(
-            "  This will remove the terse binary and hook registration."
-        );
+        println!("  This will remove the terse binary and hook registration.");
         println!(
             "  Config and log files in ~/.terse/ will be {}.",
             "preserved".yellow()
@@ -866,11 +864,7 @@ fn uninstall_deregister_hook() {
     let content = match std::fs::read_to_string(&settings_path) {
         Ok(c) => c,
         Err(e) => {
-            println!(
-                "  {} Could not read settings: {}",
-                "⚠".yellow(),
-                e
-            );
+            println!("  {} Could not read settings: {}", "⚠".yellow(), e);
             return;
         }
     };
@@ -878,11 +872,7 @@ fn uninstall_deregister_hook() {
     let mut settings: serde_json::Value = match serde_json::from_str(&content) {
         Ok(v) => v,
         Err(e) => {
-            println!(
-                "  {} Could not parse settings JSON: {}",
-                "⚠".yellow(),
-                e
-            );
+            println!("  {} Could not parse settings JSON: {}", "⚠".yellow(), e);
             return;
         }
     };
@@ -926,11 +916,7 @@ fn uninstall_deregister_hook() {
         match serde_json::to_string_pretty(&settings) {
             Ok(json) => {
                 if let Err(e) = std::fs::write(&settings_path, json) {
-                    println!(
-                        "  {} Could not write settings: {}",
-                        "⚠".yellow(),
-                        e
-                    );
+                    println!("  {} Could not write settings: {}", "⚠".yellow(), e);
                 } else {
                     println!(
                         "  {} Hook removed from {}",
@@ -940,18 +926,11 @@ fn uninstall_deregister_hook() {
                 }
             }
             Err(e) => {
-                println!(
-                    "  {} Could not serialize settings: {}",
-                    "⚠".yellow(),
-                    e
-                );
+                println!("  {} Could not serialize settings: {}", "⚠".yellow(), e);
             }
         }
     } else {
-        println!(
-            "  {} No terse hook found in Claude settings",
-            "✓".green()
-        );
+        println!("  {} No terse hook found in Claude settings", "✓".green());
     }
 }
 
@@ -1035,7 +1014,8 @@ fn uninstall_remove_unix_path(bin_dir: &str) {
             .lines()
             .filter(|line| {
                 !line.contains(bin_dir)
-                    && !line.contains("# TERSE - Token Efficiency through Refined Stream Engineering")
+                    && !line
+                        .contains("# TERSE - Token Efficiency through Refined Stream Engineering")
             })
             .collect();
 
@@ -1094,11 +1074,7 @@ fn uninstall_remove_windows_path(bin_dir: &str) {
     {
         Ok(o) => o,
         Err(e) => {
-            println!(
-                "  {} Could not read user PATH: {}",
-                "⚠".yellow(),
-                e
-            );
+            println!("  {} Could not read user PATH: {}", "⚠".yellow(), e);
             return;
         }
     };
@@ -1127,21 +1103,14 @@ fn uninstall_remove_windows_path(bin_dir: &str) {
         .output()
     {
         Ok(o) if o.status.success() => {
-            println!(
-                "  {} Removed {} from user PATH",
-                "✓".green(),
-                bin_dir
-            );
+            println!("  {} Removed {} from user PATH", "✓".green(), bin_dir);
             println!(
                 "  {} Restart your terminal for PATH changes to take effect",
                 "⚠".yellow()
             );
         }
         _ => {
-            println!(
-                "  {} Could not update user PATH",
-                "⚠".yellow()
-            );
+            println!("  {} Could not update user PATH", "⚠".yellow());
         }
     }
 }
@@ -1170,10 +1139,7 @@ fn uninstall_remove_files(keep_data: bool) {
                 schedule_windows_cleanup(&bin_dir);
             }
         } else {
-            println!(
-                "  {} Binary directory already removed",
-                "✓".green()
-            );
+            println!("  {} Binary directory already removed", "✓".green());
         }
         println!(
             "  {} Preserved data in {}",
@@ -1193,10 +1159,7 @@ fn uninstall_remove_files(keep_data: bool) {
                 schedule_windows_cleanup(&terse_home);
             }
         } else {
-            println!(
-                "  {} Terse home directory already removed",
-                "✓".green()
-            );
+            println!("  {} Terse home directory already removed", "✓".green());
         }
     }
 }
@@ -1276,9 +1239,7 @@ pub fn run_self_update(force: bool) -> Result<()> {
 
     // Step 1: Fetch latest release metadata
     println!("{}", "Checking for updates...".bold());
-    let release_url = format!(
-        "https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-    );
+    let release_url = format!("https://api.github.com/repos/{GITHUB_REPO}/releases/latest");
     let release: serde_json::Value = ureq::get(&release_url)
         .set("User-Agent", "terse-updater")
         .call()
@@ -1304,10 +1265,7 @@ pub fn run_self_update(force: bool) -> Result<()> {
 
     // Confirmation
     if !force {
-        print!(
-            "  Update {} → {}? [y/N] ",
-            CURRENT_VERSION, latest_version
-        );
+        print!("  Update {} → {}? [y/N] ", CURRENT_VERSION, latest_version);
         std::io::stdout().flush()?;
         let mut input = String::new();
         std::io::stdin().read_line(&mut input)?;
@@ -1353,12 +1311,15 @@ pub fn run_self_update(force: bool) -> Result<()> {
         .read_to_end(&mut body)
         .context("failed reading download")?;
 
-    println!("  {} Downloaded {} bytes", "✓".green(), format_number(body.len()));
+    println!(
+        "  {} Downloaded {} bytes",
+        "✓".green(),
+        format_number(body.len())
+    );
 
     // Step 4: Extract and replace binary
     println!("{}", "Installing update...".bold());
-    let bin_dir = process::terse_bin_dir()
-        .context("could not determine terse bin directory")?;
+    let bin_dir = process::terse_bin_dir().context("could not determine terse bin directory")?;
     let binary_name = process::terse_binary_name();
     let target_path = bin_dir.join(binary_name);
 
@@ -1415,10 +1376,7 @@ fn platform_asset_target() -> String {
 /// Uses shell tools (`tar`, PowerShell `Expand-Archive`) to avoid extra
 /// Rust dependencies. Falls back to treating the download as a raw binary
 /// if extraction fails.
-fn extract_binary_from_archive(
-    data: &[u8],
-    binary_name: &str,
-) -> Result<Vec<u8>> {
+fn extract_binary_from_archive(data: &[u8], binary_name: &str) -> Result<Vec<u8>> {
     use std::io::Write;
 
     let temp_dir = std::env::temp_dir().join("terse-update");
@@ -1433,7 +1391,12 @@ fn extract_binary_from_archive(
         drop(f);
 
         let status = std::process::Command::new("tar")
-            .args(["xzf", &archive_path.to_string_lossy(), "-C", &temp_dir.to_string_lossy()])
+            .args([
+                "xzf",
+                &archive_path.to_string_lossy(),
+                "-C",
+                &temp_dir.to_string_lossy(),
+            ])
             .status()
             .context("failed to run tar")?;
 
@@ -1471,8 +1434,7 @@ fn extract_binary_from_archive(
     let binary_path = find_file_recursive(&temp_dir, binary_name)
         .with_context(|| format!("could not find {binary_name} in archive"))?;
 
-    let content = std::fs::read(&binary_path)
-        .context("failed to read extracted binary")?;
+    let content = std::fs::read(&binary_path).context("failed to read extracted binary")?;
 
     // Cleanup temp
     let _ = std::fs::remove_dir_all(&temp_dir);
@@ -1481,10 +1443,7 @@ fn extract_binary_from_archive(
 }
 
 /// Recursively find a file by name in a directory.
-fn find_file_recursive(
-    dir: &std::path::Path,
-    name: &str,
-) -> Option<std::path::PathBuf> {
+fn find_file_recursive(dir: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
@@ -1506,29 +1465,22 @@ fn find_file_recursive(
 /// - Unix: write to a temp file in the same directory, then atomic rename.
 /// - Windows: rename the running exe to `.old` (Windows allows rename of
 ///   locked files), then write the new binary.
-fn replace_binary(
-    target_path: &std::path::Path,
-    new_binary: &[u8],
-) -> Result<()> {
-    let parent = target_path
-        .parent()
-        .context("binary path has no parent")?;
+fn replace_binary(target_path: &std::path::Path, new_binary: &[u8]) -> Result<()> {
+    let parent = target_path.parent().context("binary path has no parent")?;
 
     #[cfg(not(target_os = "windows"))]
     {
         use std::os::unix::fs::PermissionsExt;
 
         let temp_path = parent.join(".terse-update-tmp");
-        std::fs::write(&temp_path, new_binary)
-            .context("failed writing temp binary")?;
+        std::fs::write(&temp_path, new_binary).context("failed writing temp binary")?;
 
         // Set executable permission
         let perms = std::fs::Permissions::from_mode(0o755);
         std::fs::set_permissions(&temp_path, perms)?;
 
         // Atomic rename
-        std::fs::rename(&temp_path, target_path)
-            .context("failed to replace binary")?;
+        std::fs::rename(&temp_path, target_path).context("failed to replace binary")?;
     }
 
     #[cfg(target_os = "windows")]
@@ -1551,8 +1503,7 @@ fn replace_binary(
         }
 
         // Write the new binary
-        std::fs::write(target_path, new_binary)
-            .context("failed writing new binary")?;
+        std::fs::write(target_path, new_binary).context("failed writing new binary")?;
     }
 
     Ok(())
