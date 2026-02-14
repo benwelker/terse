@@ -24,9 +24,6 @@ const DEFAULT_MODEL: &str = "llama3.2:1b";
 /// Default timeout in milliseconds for LLM requests.
 const DEFAULT_TIMEOUT_MS: u64 = 5000;
 
-/// Minimum output length (chars) to consider LLM optimization worthwhile.
-const DEFAULT_MIN_OUTPUT_CHARS: usize = 200;
-
 // ---------------------------------------------------------------------------
 // Public config struct
 // ---------------------------------------------------------------------------
@@ -42,8 +39,6 @@ pub struct SmartPathConfig {
     pub ollama_url: String,
     /// Request timeout in milliseconds.
     pub timeout_ms: u64,
-    /// Minimum raw-output character count before LLM optimization is attempted.
-    pub min_output_chars: usize,
 }
 
 impl Default for SmartPathConfig {
@@ -53,7 +48,6 @@ impl Default for SmartPathConfig {
             model: DEFAULT_MODEL.to_string(),
             ollama_url: DEFAULT_OLLAMA_URL.to_string(),
             timeout_ms: DEFAULT_TIMEOUT_MS,
-            min_output_chars: DEFAULT_MIN_OUTPUT_CHARS,
         }
     }
 }
@@ -103,12 +97,6 @@ impl SmartPathConfig {
         {
             config.timeout_ms = ms;
         }
-
-        if let Ok(val) = std::env::var("TERSE_SMART_PATH_MIN_CHARS")
-            && let Ok(chars) = val.parse::<usize>()
-        {
-            config.min_output_chars = chars;
-        }
     }
 }
 
@@ -131,7 +119,6 @@ struct FileSmartPath {
     model: Option<String>,
     ollama_url: Option<String>,
     timeout_ms: Option<u64>,
-    min_output_chars: Option<usize>,
 }
 
 impl FileSmartPath {
@@ -148,9 +135,6 @@ impl FileSmartPath {
         }
         if let Some(ms) = self.timeout_ms {
             config.timeout_ms = ms;
-        }
-        if let Some(chars) = self.min_output_chars {
-            config.min_output_chars = chars;
         }
     }
 }
@@ -185,7 +169,6 @@ mod tests {
         assert_eq!(config.model, "llama3.2:1b");
         assert_eq!(config.ollama_url, "http://localhost:11434");
         assert_eq!(config.timeout_ms, 5000);
-        assert_eq!(config.min_output_chars, 200);
     }
 
     #[test]
@@ -196,7 +179,6 @@ mod tests {
             model: None,
             ollama_url: Some("http://custom:9999".to_string()),
             timeout_ms: None,
-            min_output_chars: Some(500),
         };
 
         file.apply_to(&mut config);
@@ -205,7 +187,6 @@ mod tests {
         assert_eq!(config.model, "llama3.2:1b"); // unchanged
         assert_eq!(config.ollama_url, "http://custom:9999");
         assert_eq!(config.timeout_ms, 5000); // unchanged
-        assert_eq!(config.min_output_chars, 500);
     }
 
     #[test]
@@ -215,8 +196,7 @@ mod tests {
                 "enabled": true,
                 "model": "qwen2.5:0.5b",
                 "ollama_url": "http://localhost:11434",
-                "timeout_ms": 3000,
-                "min_output_chars": 100
+                "timeout_ms": 3000
             }
         }"#;
         let file_cfg: FileConfig = serde_json::from_str(json).unwrap();

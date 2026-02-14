@@ -45,6 +45,18 @@ use crate::utils::token_counter::estimate_tokens;
 pub use decision::{HookDecision, OptimizationPath, PassthroughReason};
 
 // ---------------------------------------------------------------------------
+// Output size thresholds (bytes)
+// ---------------------------------------------------------------------------
+
+/// Outputs smaller than this are not worth optimizing — passthrough.
+const PASSTHROUGH_THRESHOLD_BYTES: usize = 2 * 1024; // 2 KB
+
+/// Outputs between `PASSTHROUGH_THRESHOLD_BYTES` and this value are eligible
+/// for the fast path (rule-based optimizers only).
+/// Outputs at or above this value are eligible for the smart path (LLM).
+const SMART_PATH_THRESHOLD_BYTES: usize = 10 * 1024; // 10 KB
+
+// ---------------------------------------------------------------------------
 // Execution result
 // ---------------------------------------------------------------------------
 
@@ -167,12 +179,34 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         .context("failed executing command in router")?;
     let raw_text = combine_stdout_stderr(&raw_output.stdout, &raw_output.stderr);
     let raw_tokens = estimate_tokens(&raw_text);
+    let output_bytes = raw_text.len();
 
-    // --- Smart path ---
+    // --- Size-based routing (byte thresholds) ---
+    //
+    // < 2 KB   → passthrough (not worth optimizing)
+    // 2–10 KB  → fast path eligible (rule-based post-processing only)
+    // ≥ 10 KB  → smart path eligible (LLM)
+    //
+    // Note: command-substitution fast path already ran above (pre-execution).
+    // The size gates below apply to *output post-processing* paths.
+
+    if output_bytes < PASSTHROUGH_THRESHOLD_BYTES {
+        return Ok(ExecutionResult {
+            original_tokens: raw_tokens,
+            optimized_tokens: raw_tokens,
+            path: OptimizationPath::Passthrough,
+            optimizer_name: "passthrough".to_string(),
+            output: raw_output.stdout,
+            stderr: raw_output.stderr,
+            latency_ms: None,
+        });
+    }
+
+    // --- Smart path (≥ 10 KB) ---
     let smart_config = SmartPathConfig::load();
-    if cb.is_allowed(PathId::SmartPath)
+    if output_bytes >= SMART_PATH_THRESHOLD_BYTES
+        && cb.is_allowed(PathId::SmartPath)
         && smart_config.enabled
-        && raw_text.len() >= smart_config.min_output_chars
     {
         match llm::optimize_with_llm(command, &raw_text) {
             Ok(llm_result) => {
@@ -194,7 +228,7 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         }
     }
 
-    // --- Passthrough ---
+    // --- Passthrough (2–10 KB without smart path, or smart path failed) ---
     Ok(ExecutionResult {
         original_tokens: raw_tokens,
         optimized_tokens: raw_tokens,

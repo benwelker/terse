@@ -75,11 +75,17 @@ Claude Code executes the (possibly rewritten) command
     ↓ (if rewritten to terse run)
 terse run "original_command":
   Step 2 — Execute the command via optimizer
-  Step 3 — Router Decision (based on actual output):
-    Output < 100 chars?                      → Passthrough (not worth optimizing)
-    Rule-based optimizer available?           → Fast Path (Rust, <20ms)
-    Ollama available AND output > 200 chars?  → Smart Path (LLM, <2s)
+  Step 3 — Router Decision (based on actual output byte size):
+    Output < 2 KB?                           → Passthrough (not worth optimizing)
+    Rule-based optimizer available (2–10 KB)? → Fast Path (Rust, <20ms)
+    Ollama available AND output ≥ 10 KB?      → Preprocess → Smart Path (LLM, <2s)
     None of the above?                        → Run raw and pass through
+  Step 3.5 — Preprocessing (Smart Path only, Phase 5-1):
+    Noise removal (ANSI, progress bars, boilerplate)
+    Path filtering (node_modules, target/debug, __pycache__, etc.)
+    Deduplication (repeated lines/blocks → count annotation)
+    Truncation with context preservation (if still > 32 KB)
+    Trim (whitespace normalization)
   Step 4 — Post-Processing:
     Whitespace cleanup (applied to all optimized output)
     ↓
@@ -113,7 +119,7 @@ terse run "original_command":
 **Passthrough:**
 
 - Critical operations: file edits, destructive commands (rm, mv, >)
-- Tiny outputs: <100 chars
+- Tiny outputs: < 2 KB (not worth optimizing)
 - Failed optimizations: validation errors, timeouts
 - Zero overhead
 
@@ -149,6 +155,13 @@ terse/
 │   │   ├── mod.rs             # Analytics engine
 │   │   ├── logger.rs          # Command logging (JSONL)
 │   │   └── reporter.rs        # Stats, reports, discovery
+│   ├── preprocessing/
+│   │   ├── mod.rs             # Pipeline orchestrator
+│   │   ├── noise.rs           # ANSI codes, progress bars, boilerplate
+│   │   ├── path_filter.rs     # Directory/path noise filtering
+│   │   ├── dedup.rs           # Repetitive content deduplication
+│   │   ├── truncation.rs      # Truncation with context preservation
+│   │   └── trim.rs            # Final whitespace normalization
 │   ├── config/
 │   │   ├── mod.rs             # Configuration system
 │   │   └── schema.rs          # Config schema + defaults + hierarchy
@@ -369,7 +382,7 @@ A naive `command.starts_with("git")` check misses all of these. The existing `no
   - If validation fails → fall back to raw output
 - [x] Wire LLM into **both** hook and run flows (two-level routing per execution model):
   - **Hook level** (`src/hook/mod.rs`): After checking rule-based optimizers, also check if smart path is enabled AND Ollama is healthy. If so, rewrite to `terse run` even though no rule-based optimizer matched. The hook **cannot** check output size — it runs pre-execution.
-  - **Run level** (`src/run/mod.rs`): After executing the command raw (when no optimizer matched), check output size. If output > `min_output_chars` (default 200) AND smart path is enabled AND Ollama is available → send to LLM. If output < 100 chars → passthrough (not worth optimizing).
+  - **Run level** (`src/run/mod.rs`): After executing the command raw (when no optimizer matched), check output byte size. If output ≥ 10 KB AND smart path is enabled AND Ollama is available → send to LLM. If output < 2 KB → passthrough (not worth optimizing). Outputs 2–10 KB fall through to passthrough if no fast-path optimizer handled them.
   - This two-level split aligns with the Core Architecture execution model where the hook makes the pre-execution rewrite decision and `terse run` makes the post-execution optimization decision.
 - [x] Log LLM path usage: command, latency, tokens saved, model used
 - [x] Write integration tests (gated behind `#[cfg(feature = "llm-tests")]` or environment variable)
@@ -486,6 +499,119 @@ Total Tokens Saved: 29,880 (78.4% average)
 
 ---
 
+### Phase 5-1: Smart Path Preprocessing Pipeline (Week 6, alongside Phase 6)
+
+**Goal:** Reduce raw output size by 40–70% _before_ sending to the LLM, improving smart path quality, latency, and token efficiency. Rust-based preprocessing is deterministic, fast (<5ms), and runs as a pipeline stage between raw command execution and LLM optimization.
+
+**Rationale:** Sending 50 KB of raw `cargo test` output to a 1B-parameter model wastes context window, increases latency, and may cause the LLM to miss critical information buried in noise. Preprocessing strips the obvious waste so the LLM can focus on intelligent condensation of the remaining signal.
+
+**Rust concepts introduced:** Iterator adaptors, `HashSet` for deduplication, regex for pattern matching, string slicing with context preservation.
+
+**Deliverables:**
+
+- [ ] Create `src/preprocessing/mod.rs` — pipeline orchestrator:
+  - `preprocess(raw: &str, command: &str) -> PreprocessedOutput`
+  - `PreprocessedOutput` struct: `{ text: String, original_bytes: usize, preprocessed_bytes: usize, stages_applied: Vec<&'static str> }`
+  - Pipeline runs stages in order; each stage receives the output of the previous
+  - Entire pipeline target: <5ms for 100 KB input
+
+- [ ] Implement `src/preprocessing/noise.rs` — universal noise removal:
+  - Strip ANSI escape codes / color sequences (`\x1b[...m`, `\x1b[...K`, etc.)
+  - Remove progress bars, spinners, and carriage-return overwrite lines (`\r` without `\n`)
+  - Strip download/upload progress indicators (e.g., `Downloading... 45%`, `████░░░░ 50%`)
+  - Remove blank-line runs (collapse 3+ consecutive blank lines → single blank line)
+  - Strip trailing whitespace from every line
+  - Remove common boilerplate lines:
+    - npm: `added N packages in Ns`, `up to date, audited N packages`
+    - cargo: `Compiling ...`, `Downloading ...` (non-error lines)
+    - dotnet: `Build succeeded.`, `Time Elapsed ...`
+    - pip: `Requirement already satisfied`, `Successfully installed ...`
+  - Configurable: boilerplate patterns stored as a list for future user extension
+
+- [ ] Implement `src/preprocessing/path_filter.rs` — directory/path noise filtering:
+  - Comprehensive list of directories safe to filter from output:
+    - **JavaScript/Node:** `node_modules`, `dist`, `.next`, `.nuxt`, `.cache`, `coverage`, `.turbo`
+    - **Rust:** `target/debug`, `target/release`, `target/.fingerprint`, `target/build`
+    - **Python:** `__pycache__`, `.venv`, `venv`, `env`, `.eggs`, `*.egg-info`, `.tox`, `.mypy_cache`, `.pytest_cache`
+    - **Java/JVM:** `build/classes`, `build/libs`, `.gradle`, `target/classes` (Maven)
+    - **.NET:** `bin/Debug`, `bin/Release`, `obj/Debug`, `obj/Release`, `packages`
+    - **General:** `.git/objects`, `.git/refs`, `.git/logs`, `.hg`, `.svn`, `vendor` (Go), `Pods` (iOS)
+    - **IDE/Editor:** `.idea`, `.vscode`, `.vs`, `*.swp`, `*.swo`
+    - **Build artifacts:** `build`, `out`, `output`, `.build`, `cmake-build-*`
+  - Filter modes:
+    - **Line filter**: remove lines where the path segment appears (e.g., lines containing `node_modules/`)
+    - **Summary**: replace N filtered lines with `[filtered N lines matching node_modules/*, dist/*, ...]`
+  - Default: summary mode (preserves awareness that content was removed)
+
+- [ ] Implement `src/preprocessing/dedup.rs` — repetitive content deduplication:
+  - Detect and collapse repeated lines (e.g., 200 `PASS src/tests/...` lines → `[200× PASS] src/tests/...`)
+  - Detect and collapse repeated blocks (e.g., same warning repeated across files)
+  - Similarity threshold: exact match for lines, configurable for blocks (future)
+  - Preserve first and last occurrence with count annotation
+  - Handle numbered sequences (e.g., `test 1/200`, `test 2/200` → `[tests 1–200/200: all passing]`)
+
+- [ ] Implement `src/preprocessing/truncation.rs` — truncation with context preservation:
+  - If preprocessed output still exceeds a max size (default: 32 KB), truncate intelligently:
+    - Preserve first N lines (command header / summary) and last M lines (final result / totals)
+    - Insert `[... truncated {X} lines ({Y} bytes) ...]` marker in the middle
+    - For structured output (e.g., test results), prefer keeping failures over passes
+  - Section-aware truncation (future): detect sections by headers/blank-line boundaries, keep section starts
+
+- [ ] Implement `src/preprocessing/trim.rs` — final whitespace normalization:
+  - Trim leading/trailing whitespace from full output
+  - Normalize line endings to `\n`
+  - Collapse runs of 3+ blank lines to 1 blank line (reinforces noise removal)
+  - Strip any remaining trailing whitespace per line
+
+- [ ] Wire preprocessing into the router's smart path in `src/router/mod.rs`:
+  - Before calling `llm::optimize_with_llm()`, run `preprocess(raw_text, command)`
+  - Pass `preprocessed.text` to LLM instead of `raw_text`
+  - Log preprocessing stats: original bytes, preprocessed bytes, stages applied
+  - Update `ExecutionResult` to optionally carry preprocessing metadata
+
+- [ ] Add analytics tracking for preprocessing effectiveness:
+  - Log `preprocessing_bytes_removed` and `preprocessing_pct` in command-log.jsonl
+  - Add preprocessing stats to `terse stats` output
+
+- [ ] Write unit tests:
+  - Noise removal: ANSI codes, progress bars, boilerplate patterns
+  - Path filtering: node_modules paths, target/debug paths, mixed output
+  - Deduplication: repeated lines, repeated blocks, numbered sequences
+  - Truncation: context preservation, marker insertion
+  - Full pipeline: raw cargo test output → preprocessed → verify critical info preserved
+  - Edge cases: empty input, single-line input, already-small input (no-op)
+
+**Example — Before/After preprocessing of `cargo test` output (50 KB → 8 KB):**
+
+```
+BEFORE (50 KB):
+   Compiling serde v1.0.200
+   Compiling serde_json v1.0.117
+   ... (40 more Compiling lines)
+   Compiling terse v0.1.0
+running 140 tests
+test analytics::logger::tests::test_log_entry ... ok
+test analytics::logger::tests::test_read_entries ... ok
+... (138 more "ok" lines)
+test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
+
+AFTER (8 KB):
+running 140 tests
+[140× ok] analytics::logger::tests::test_log_entry ... (and 139 more)
+test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
+```
+
+**Success Criteria:**
+
+- Preprocessing reduces output by 40–70% on average for outputs ≥ 10 KB
+- Pipeline executes in <5ms for 100 KB input
+- No critical information lost (errors, warnings, failures preserved)
+- LLM quality improves: shorter input → more focused condensation
+- Smart path latency decreases due to smaller prompt size
+- All preprocessing stages individually testable and configurable
+
+---
+
 ### Phase 6: Configuration System (Week 6–7)
 
 **Goal:** User control over all behavior without code changes.
@@ -518,10 +644,27 @@ Total Tokens Saved: 29,880 (78.4% average)
   enabled = true
   model = "llama3.2:1b"
   temperature = 0.0
-  min_output_chars = 200
   max_latency_ms = 3000
   ollama_url = "http://localhost:11434"
   # runtime = "ollama"  # Reserved for Phase 12: future values "llama-cpp", "openai-compat"
+
+  [output_thresholds]
+  # Byte-based thresholds for path routing (measured via output.len())
+  passthrough_below_bytes = 2048    # < 2 KB  → passthrough
+  smart_path_above_bytes  = 10240   # ≥ 10 KB → smart path; 2–10 KB → fast path
+
+  [preprocessing]
+  enabled = true
+  max_output_bytes = 32768          # Truncate to 32 KB after preprocessing
+  noise_removal = true              # ANSI codes, progress bars, boilerplate
+  path_filtering = true             # Filter known noisy directories
+  path_filter_mode = "summary"      # "summary" (annotated) or "remove" (silent)
+  deduplication = true              # Collapse repeated lines/blocks
+  truncation = true                 # Truncate with context preservation
+  # Additional boilerplate patterns (appended to built-in list)
+  # extra_boilerplate = ["pattern1", "pattern2"]
+  # Additional directories to filter (appended to built-in list)
+  # extra_filtered_dirs = ["custom_build/", ".special_cache/"]
 
   [router]
   decision_cache_ttl_secs = 300
@@ -913,6 +1056,7 @@ path = "src/main.rs"
 | **`ureq` sync HTTP** (not `reqwest` async)     | Simpler for beginner Rust, hook is inherently synchronous (stdin→stdout), no async runtime needed           |
 | **Circuit breaker per path** (not global)      | If LLM is down, fast path still works; if optimizer has bug, LLM fallback still works                       |
 | **Whitespace optimizer as post-processing**    | Applied after both fast and smart paths for consistent additional savings                                   |
+| **Preprocessing before LLM** (not raw input)   | 40–70% noise reduction before LLM improves quality, reduces latency, and saves LLM context window           |
 | **Hook-first, plugin later**                   | Faster iteration during development; plugin packaging after core is proven                                  |
 | **`anyhow` from Phase 1, `thiserror` Phase 9** | Start with simple error handling, refine to typed errors once the error landscape is understood             |
 
@@ -944,20 +1088,21 @@ path = "src/main.rs"
 
 ## Timeline Summary
 
-| Phase | Week  | Deliverable                                 | Key Rust Concepts                        |
-| ----- | ----- | ------------------------------------------- | ---------------------------------------- |
-| 1     | 1     | Hook passthrough + project setup            | Modules, serde, stdin/stdout, Result     |
-| 2     | 2–3   | Git optimizer with measurable savings       | Traits, enums, regex, match, tests       |
-| 3     | 3–4   | LLM smart path via Ollama HTTP              | HTTP client, timeouts, Option chaining   |
-| 4     | 4–5   | Router + decision engine + circuit breaker  | Enums as types, caching, builder pattern |
-| 5     | 5–6   | Analytics CLI + logging                     | HashMap, iterators, formatted output     |
-| 6     | 6–7   | Config system (TOML, hierarchy, profiles)   | TOML parsing, path handling, defaults    |
-| 7     | 7–8   | File, build, docker optimizers + whitespace | Code org at scale, DRY, trait objects    |
-| 8     | 8–9   | Prompt engineering + LLM quality            | String templating, structured output     |
-| 9     | 9–10  | Safety, error handling, reliability         | Custom errors, thiserror, anyhow         |
-| 10    | 10–11 | Cross-platform builds + CI/CD               | cfg attributes, GitHub Actions           |
-| 11    | 11–12 | Claude Code plugin packaging                | Distribution, manifests                  |
-| 12    | 12+   | Copilot CLI + advanced features             | Async, context detection                 |
+| Phase | Week  | Deliverable                                 | Key Rust Concepts                         |
+| ----- | ----- | ------------------------------------------- | ----------------------------------------- |
+| 1     | 1     | Hook passthrough + project setup            | Modules, serde, stdin/stdout, Result      |
+| 2     | 2–3   | Git optimizer with measurable savings       | Traits, enums, regex, match, tests        |
+| 3     | 3–4   | LLM smart path via Ollama HTTP              | HTTP client, timeouts, Option chaining    |
+| 4     | 4–5   | Router + decision engine + circuit breaker  | Enums as types, caching, builder pattern  |
+| 5     | 5–6   | Analytics CLI + logging                     | HashMap, iterators, formatted output      |
+| 5-1   | 6     | Smart path preprocessing pipeline           | Iterators, HashSet, regex, string slicing |
+| 6     | 6–7   | Config system (TOML, hierarchy, profiles)   | TOML parsing, path handling, defaults     |
+| 7     | 7–8   | File, build, docker optimizers + whitespace | Code org at scale, DRY, trait objects     |
+| 8     | 8–9   | Prompt engineering + LLM quality            | String templating, structured output      |
+| 9     | 9–10  | Safety, error handling, reliability         | Custom errors, thiserror, anyhow          |
+| 10    | 10–11 | Cross-platform builds + CI/CD               | cfg attributes, GitHub Actions            |
+| 11    | 11–12 | Claude Code plugin packaging                | Distribution, manifests                   |
+| 12    | 12+   | Copilot CLI + advanced features             | Async, context detection                  |
 
 ---
 

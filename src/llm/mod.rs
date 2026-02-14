@@ -23,8 +23,8 @@
 ///    they are routed through TERSE even without a rule-based optimizer.
 ///
 /// 2. **Run level** (`terse run`): after executing the command and capturing
-///    output, if the output exceeds `min_output_chars` the smart path sends
-///    it to the LLM for condensation.
+///    output, if the output exceeds the byte-size threshold (see router
+///    constants) the smart path sends it to the LLM for condensation.
 use std::time::Instant;
 
 use anyhow::Result;
@@ -79,7 +79,7 @@ pub fn is_smart_path_available() -> bool {
 ///
 /// Called from `terse run` when:
 /// - No rule-based optimizer matched the command
-/// - The raw output exceeds `min_output_chars`
+/// - The raw output exceeds the byte-size threshold (router concern)
 /// - The smart path feature flag is enabled
 ///
 /// Returns `Ok(LlmResult)` on success, or `Err` if the LLM call fails or

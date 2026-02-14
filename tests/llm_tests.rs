@@ -93,12 +93,6 @@ fn smart_path_feature_flag_env_vars() {
     let config = SmartPathConfig::load();
     assert_eq!(config.timeout_ms, 3000);
     unsafe { remove_env("TERSE_SMART_PATH_TIMEOUT_MS") };
-
-    // --- min-chars override ---
-    unsafe { set_env("TERSE_SMART_PATH_MIN_CHARS", "500") };
-    let config = SmartPathConfig::load();
-    assert_eq!(config.min_output_chars, 500);
-    unsafe { remove_env("TERSE_SMART_PATH_MIN_CHARS") };
 }
 
 // ---------------------------------------------------------------------------
