@@ -186,7 +186,8 @@ if (-not (Test-Path $claudeDir)) {
     New-Item -ItemType Directory -Force -Path $claudeDir | Out-Null
 }
 
-$hookCommand = "$BINARY hook"
+# Quote the binary path to handle spaces in user profile paths (e.g. "John Smith")
+$hookCommand = "`"$BINARY`" hook"
 
 try {
     if (Test-Path $CLAUDE_SETTINGS) {
@@ -228,7 +229,8 @@ try {
             )
         }
         $settings.hooks.PreToolUse += $hook
-        $settings | ConvertTo-Json -Depth 10 | Set-Content $CLAUDE_SETTINGS -Encoding UTF8
+        $json = $settings | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($CLAUDE_SETTINGS, $json)
         Write-Ok "Hook registered in $CLAUDE_SETTINGS"
     }
 } catch {

@@ -118,7 +118,8 @@ if (Test-Path $CLAUDE_SETTINGS) {
         }
 
         if ($modified) {
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $CLAUDE_SETTINGS -Encoding UTF8
+            $json = $settings | ConvertTo-Json -Depth 10
+            [System.IO.File]::WriteAllText($CLAUDE_SETTINGS, $json)
             Write-Ok "Hook removed from $CLAUDE_SETTINGS"
         } else {
             Write-Ok "No terse hook found in Claude settings"

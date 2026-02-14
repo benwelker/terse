@@ -1120,3 +1120,15 @@ At each phase, validate with:
 - **Cross-platform CI:** (Phase 10+) All tests pass on Windows/macOS/Linux
 
 **Overall success target:** 60–80% average token savings, <20ms fast path latency, <2s smart path latency, <0.1% failure rate, single binary install.
+
+# Claude Tools
+
+Bash - Executes shell commands (most common, equivalent to what you called "BashTool")
+Write - Creates or overwrites files
+Edit - Replaces strings in existing files
+Read - Reads file contents
+Glob - Finds files matching glob patterns
+Grep - Searches file contents with regular expressions
+Task - Spawns subagents
+WebFetch - Fetches and processes web content
+WebSearch - Searches the web
