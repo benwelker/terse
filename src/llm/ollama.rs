@@ -267,7 +267,7 @@ const CONTEXT_WINDOW: u32 = 40_960;
 ///
 /// We want the response shorter than the input but not so tight that the
 /// model truncates mid-sentence. Budget is 50% of estimated input tokens,
-/// clamped to [512, 4096]. The 512-token floor ensures enough room to
+/// clamped to [1024, 4096]. The 1024-token floor ensures enough room to
 /// condense even small outputs (e.g. 20 git commits at ~15 tokens each).
 fn estimate_response_budget(total_chars: usize) -> u32 {
     let input_tokens = (total_chars / 4) as u32;
@@ -282,6 +282,12 @@ fn estimate_response_budget(total_chars: usize) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn estimate_budget_small_input() {
+        // 1000 chars → 250 tokens → 50% = 125 → clamped to 1024
+        assert_eq!(estimate_response_budget(1000), 1024);
+    }
 
     #[test]
     fn estimate_budget_medium_input() {
