@@ -48,10 +48,7 @@ fn pattern_key(line: &str) -> String {
             key.push('#');
         } else if c.is_ascii_hexdigit() && key.ends_with('#') {
             // Part of a hex sequence after digits — skip
-            while chars
-                .peek()
-                .is_some_and(|ch| ch.is_ascii_hexdigit())
-            {
+            while chars.peek().is_some_and(|ch| ch.is_ascii_hexdigit()) {
                 chars.next();
             }
         } else {

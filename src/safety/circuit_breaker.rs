@@ -69,6 +69,18 @@ impl CircuitBreaker {
         }
     }
 
+    /// Load circuit breaker state from disk, using config-supplied parameters
+    /// for window size, failure threshold, and cooldown duration.
+    pub fn from_config(window: usize, threshold: f64, cooldown_secs: i64) -> Self {
+        let state = load_state().unwrap_or_default();
+        Self {
+            state,
+            window,
+            threshold,
+            cooldown_secs,
+        }
+    }
+
     /// Check whether the given path is currently allowed.
     ///
     /// Returns `false` if the path is tripped and the cooldown has not
@@ -134,8 +146,7 @@ impl CircuitBreaker {
             let failures = ps.results.iter().filter(|&&ok| !ok).count();
             let failure_rate = failures as f64 / ps.results.len() as f64;
             if failure_rate > threshold {
-                ps.tripped_until =
-                    Some(Utc::now() + chrono::Duration::seconds(cooldown_secs));
+                ps.tripped_until = Some(Utc::now() + chrono::Duration::seconds(cooldown_secs));
             }
         }
 

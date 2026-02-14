@@ -98,7 +98,9 @@ pub fn filter_paths(text: &str) -> String {
             }
             let count = i - start;
             // Emit a single summary line
-            result.push_str(&format!("[{count} path(s) in noise directories filtered]\n"));
+            result.push_str(&format!(
+                "[{count} path(s) in noise directories filtered]\n"
+            ));
         } else {
             result.push_str(lines[i]);
             result.push('\n');

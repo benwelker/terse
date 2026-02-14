@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 mod analytics;
 mod cli;
+mod config;
 mod hook;
 mod llm;
 mod matching;
@@ -66,6 +67,32 @@ enum Commands {
         #[arg(trailing_var_arg = true, required = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Manage TERSE configuration
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ConfigAction {
+    /// Show effective configuration (merged from all sources)
+    Show,
+    /// Initialize a default config file at ~/.terse/config.toml
+    Init {
+        /// Overwrite existing config file
+        #[arg(long)]
+        force: bool,
+    },
+    /// Set a configuration value (e.g. `terse config set general.mode fast-only`)
+    Set {
+        /// Dotted key path (e.g. general.mode, smart_path.model)
+        key: String,
+        /// Value to set (auto-detected as bool/int/float/string)
+        value: String,
+    },
+    /// Reset configuration to defaults
+    Reset,
 }
 
 fn main() -> Result<()> {
@@ -94,5 +121,11 @@ fn main() -> Result<()> {
             let command = args.join(" ");
             cli::run_test(&command)
         }
+        Commands::Config { action } => match action {
+            ConfigAction::Show => cli::run_config_show(),
+            ConfigAction::Init { force } => cli::run_config_init(force),
+            ConfigAction::Set { key, value } => cli::run_config_set(&key, &value),
+            ConfigAction::Reset => cli::run_config_reset(),
+        },
     }
 }

@@ -129,7 +129,9 @@ mod tests {
     fn truncates_large_output() {
         let mut input = String::new();
         for i in 0..1000 {
-            input.push_str(&format!("line {i}: some content here for testing purposes\n"));
+            input.push_str(&format!(
+                "line {i}: some content here for testing purposes\n"
+            ));
         }
 
         let max_bytes = 2048;

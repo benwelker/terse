@@ -32,9 +32,7 @@ pub struct HookEvent {
     /// Reason for passthrough (if applicable).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passthrough_reason: Option<String>,
-    /// Expected optimization path (if rewrite).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expected_path: Option<String>,
+
 }
 
 // ---------------------------------------------------------------------------
@@ -49,14 +47,13 @@ pub fn log_hook_event(event: &HookEvent) {
 }
 
 /// Convenience: log a rewrite event.
-pub fn log_rewrite(tool_name: &str, command: Option<&str>, expected_path: &str) {
+pub fn log_rewrite(tool_name: &str, command: Option<&str>) {
     let event = HookEvent {
         timestamp: Utc::now().to_rfc3339(),
         tool_name: tool_name.to_string(),
         command: command.map(|s| s.to_string()),
         decision: "rewrite".to_string(),
         passthrough_reason: None,
-        expected_path: Some(expected_path.to_string()),
     };
     log_hook_event(&event);
 }
@@ -69,7 +66,6 @@ pub fn log_passthrough(tool_name: &str, command: Option<&str>, reason: &str) {
         command: command.map(|s| s.to_string()),
         decision: "passthrough".to_string(),
         passthrough_reason: Some(reason.to_string()),
-        expected_path: None,
     };
     log_hook_event(&event);
 }

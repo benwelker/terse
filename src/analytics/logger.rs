@@ -119,8 +119,7 @@ pub fn log_command_result_full(
     let savings_pct = if original_tokens == 0 {
         0.0
     } else {
-        ((original_tokens.saturating_sub(optimized_tokens)) as f64 / original_tokens as f64)
-            * 100.0
+        ((original_tokens.saturating_sub(optimized_tokens)) as f64 / original_tokens as f64) * 100.0
     };
 
     let entry = CommandLogEntry {

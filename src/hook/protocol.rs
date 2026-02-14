@@ -1,9 +1,54 @@
 use serde::{Deserialize, Serialize};
 
+// ---------------------------------------------------------------------------
+// Supported tool classification
+// ---------------------------------------------------------------------------
+
+/// Recognized Claude Code tool categories.
+///
+/// Each variant represents a class of tools that terse can intercept.
+/// Adding support for a new tool is a two-step process:
+/// 1. Add a variant here and update [`ToolKind::from_name`].
+/// 2. Add a handler arm in `hook::handle_request`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolKind {
+    /// Shell command execution (`Bash` tool).
+    Bash,
+    /// Any tool terse does not (yet) handle.
+    Unsupported,
+}
+
+impl ToolKind {
+    /// Classify a Claude Code tool name into a [`ToolKind`].
+    ///
+    /// Matching is case-insensitive. Unknown tools map to
+    /// [`Unsupported`](ToolKind::Unsupported).
+    pub fn from_name(name: &str) -> Self {
+        if name.eq_ignore_ascii_case("bash") {
+            Self::Bash
+        } else {
+            Self::Unsupported
+        }
+    }
+}
+
+impl std::fmt::Display for ToolKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bash => write!(f, "bash"),
+            Self::Unsupported => write!(f, "unsupported"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hook request
+// ---------------------------------------------------------------------------
+
 /// Hook request received from Claude Code on stdin.
 ///
-/// Claude Code sends this JSON when a PreToolUse event fires for a Bash tool call.
-/// Contains the tool name and the command Claude wants to execute.
+/// Claude Code sends this JSON when a PreToolUse event fires. The payload
+/// contains the tool name and tool-specific input fields.
 #[derive(Debug, Deserialize)]
 pub struct HookRequest {
     #[serde(default)]
@@ -13,14 +58,26 @@ pub struct HookRequest {
 }
 
 impl HookRequest {
-    pub fn is_bash(&self) -> bool {
-        self.tool_name.eq_ignore_ascii_case("bash")
+    /// Classify this request's tool into a [`ToolKind`].
+    pub fn tool_kind(&self) -> ToolKind {
+        ToolKind::from_name(&self.tool_name)
     }
 }
 
+/// Tool input fields sent by Claude Code.
+///
+/// Different tools populate different fields. Unrecognized fields are
+/// silently ignored by serde so the struct is forward-compatible.
 #[derive(Debug, Default, Deserialize)]
 pub struct ToolInput {
+    /// Shell command (Bash tool).
     pub command: Option<String>,
+    /// File path (Read / Write / Edit tools — reserved for future use).
+    #[allow(dead_code)]
+    pub file_path: Option<String>,
+    /// File content (Write tool — reserved for future use).
+    #[allow(dead_code)]
+    pub content: Option<String>,
 }
 
 /// Hook response written to stdout for Claude Code.
@@ -110,7 +167,7 @@ mod tests {
         let input = r#"{"tool_name":"Bash","tool_input":{"command":"git status"}}"#;
         let request: HookRequest = serde_json::from_str(input).unwrap();
 
-        assert!(request.is_bash());
+        assert_eq!(request.tool_kind(), ToolKind::Bash);
         assert_eq!(request.tool_input.command.as_deref(), Some("git status"));
     }
 
@@ -119,7 +176,30 @@ mod tests {
         let input = r#"{"tool_name":"Edit","tool_input":{}}"#;
         let request: HookRequest = serde_json::from_str(input).unwrap();
 
-        assert!(!request.is_bash());
+        assert_eq!(request.tool_kind(), ToolKind::Unsupported);
         assert_eq!(request.tool_input.command, None);
+    }
+
+    // ToolKind classification -------------------------------------------------
+
+    #[test]
+    fn tool_kind_classifies_bash_case_insensitive() {
+        assert_eq!(ToolKind::from_name("Bash"), ToolKind::Bash);
+        assert_eq!(ToolKind::from_name("bash"), ToolKind::Bash);
+        assert_eq!(ToolKind::from_name("BASH"), ToolKind::Bash);
+    }
+
+    #[test]
+    fn tool_kind_classifies_unknown_as_unsupported() {
+        assert_eq!(ToolKind::from_name("Edit"), ToolKind::Unsupported);
+        assert_eq!(ToolKind::from_name("Read"), ToolKind::Unsupported);
+        assert_eq!(ToolKind::from_name("Write"), ToolKind::Unsupported);
+        assert_eq!(ToolKind::from_name(""), ToolKind::Unsupported);
+    }
+
+    #[test]
+    fn tool_kind_display() {
+        assert_eq!(ToolKind::Bash.to_string(), "bash");
+        assert_eq!(ToolKind::Unsupported.to_string(), "unsupported");
     }
 }

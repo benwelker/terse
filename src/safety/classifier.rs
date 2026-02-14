@@ -9,6 +9,7 @@
 /// The classifier examines both the **core command** (extracted by the
 /// matching engine) for command-name checks, and the **full original command**
 /// for redirect detection.
+use crate::config;
 use crate::matching;
 
 /// Classification result for a command.
@@ -20,13 +21,14 @@ pub enum CommandClass {
     Optimizable,
 }
 
-/// Commands that must never be optimized, matched by first word of the core
-/// command.
+/// Built-in commands that must never be optimized, matched by first word of
+/// the core command.
 ///
-/// Includes destructive file operations and interactive editors.
-const PASSTHROUGH_COMMANDS: &[&str] = &[
-    "rm", "rmdir", "del", "mv", "move", "code", "vim", "vi", "nano", "emacs",
-    "subl", "notepad",
+/// These are the minimum set that is always enforced even if the user's config
+/// removes them. Additional commands can be added via `passthrough.commands`
+/// in config.toml.
+const BUILTIN_PASSTHROUGH_COMMANDS: &[&str] = &[
+    "rm", "rmdir", "del", "mv", "move", "code", "vim", "vi", "nano", "emacs", "subl", "notepad",
 ];
 
 /// Classify a command for routing purposes.
@@ -34,13 +36,27 @@ const PASSTHROUGH_COMMANDS: &[&str] = &[
 /// `command` is the full original command string as received from Claude Code.
 /// Internally, the core command is extracted for name matching, while the
 /// full string is checked for file output redirections.
+///
+/// Passthrough commands are loaded from config (merging with built-in set).
 pub fn classify(command: &str) -> CommandClass {
     let core = matching::extract_core_command(command);
     let first = first_word(core);
 
-    if PASSTHROUGH_COMMANDS
+    // Check built-in passthrough commands (always enforced).
+    if BUILTIN_PASSTHROUGH_COMMANDS
         .iter()
         .any(|&cmd| first.eq_ignore_ascii_case(cmd))
+    {
+        return CommandClass::NeverOptimize;
+    }
+
+    // Check config-supplied passthrough commands.
+    let cfg = config::load();
+    if cfg
+        .passthrough
+        .commands
+        .iter()
+        .any(|cmd| first.eq_ignore_ascii_case(cmd))
     {
         return CommandClass::NeverOptimize;
     }
@@ -154,10 +170,7 @@ mod tests {
             classify("echo hello > file.txt"),
             CommandClass::NeverOptimize
         );
-        assert_eq!(
-            classify("ls -la >> log.txt"),
-            CommandClass::NeverOptimize
-        );
+        assert_eq!(classify("ls -la >> log.txt"), CommandClass::NeverOptimize);
     }
 
     #[test]
@@ -166,10 +179,7 @@ mod tests {
             classify("echo \"hello > world\""),
             CommandClass::Optimizable
         );
-        assert_eq!(
-            classify("echo 'data >> more'"),
-            CommandClass::Optimizable
-        );
+        assert_eq!(classify("echo 'data >> more'"), CommandClass::Optimizable);
     }
 
     #[test]

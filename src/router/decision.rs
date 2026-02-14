@@ -80,11 +80,9 @@ impl fmt::Display for PassthroughReason {
 pub enum HookDecision {
     /// Rewrite the command to route through `terse run`.
     ///
-    /// `expected_path` is informational — the actual path is decided at run
-    /// time based on output size and runtime checks.
-    Rewrite {
-        expected_path: OptimizationPath,
-    },
+    /// The actual optimization path (fast/smart/passthrough) is determined
+    /// at run time based on output size after preprocessing.
+    Rewrite,
     /// Pass through unchanged — return empty JSON to Claude Code.
     Passthrough(PassthroughReason),
 }

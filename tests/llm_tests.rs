@@ -18,7 +18,7 @@
 /// is set otherwise). The `unsafe` blocks are sound because no other thread
 /// reads these variables concurrently.
 use terse::llm::config::SmartPathConfig;
-use terse::llm::prompts::{build_prompt, classify_command, CommandCategory};
+use terse::llm::prompts::{CommandCategory, build_chat_messages, classify_command};
 use terse::llm::validation::validate_llm_output;
 
 /// Helper: set an env var (wraps the `unsafe` call).
@@ -50,7 +50,10 @@ fn smart_path_feature_flag_env_vars() {
     // --- disabled via env (overrides any config file) ---
     unsafe { set_env("TERSE_SMART_PATH", "0") };
     let config = SmartPathConfig::load();
-    assert!(!config.enabled, "TERSE_SMART_PATH=0 should disable (overrides config file)");
+    assert!(
+        !config.enabled,
+        "TERSE_SMART_PATH=0 should disable (overrides config file)"
+    );
 
     // --- "1" enables ---
     unsafe { set_env("TERSE_SMART_PATH", "1") };
@@ -109,7 +112,10 @@ fn category_selection_for_various_commands() {
         ("cargo test --release", CommandCategory::BuildTest),
         ("npm run build", CommandCategory::BuildTest),
         ("docker compose up", CommandCategory::ContainerTools),
-        ("kubectl get pods -n default", CommandCategory::ContainerTools),
+        (
+            "kubectl get pods -n default",
+            CommandCategory::ContainerTools,
+        ),
         ("journalctl -u nginx --since today", CommandCategory::Logs),
         ("dmesg --level=err", CommandCategory::Logs),
         ("whoami", CommandCategory::Generic),
@@ -128,27 +134,60 @@ fn category_selection_for_various_commands() {
 
 #[test]
 fn prompt_contains_all_sections() {
-    let prompt = build_prompt("docker ps", "CONTAINER ID   IMAGE   STATUS\nabc123  nginx  Up 2h");
+    let (system, user) = build_chat_messages(
+        "docker ps",
+        "CONTAINER ID   IMAGE   STATUS\nabc123  nginx  Up 2h",
+    );
 
-    assert!(prompt.contains("## Rules"), "prompt should have Rules section");
-    assert!(prompt.contains("## Example"), "prompt should have Example section");
-    assert!(prompt.contains("## Command"), "prompt should have Command section");
-    assert!(prompt.contains("`docker ps`"), "prompt should contain the command");
-    assert!(prompt.contains("## Raw output"), "prompt should have Raw output");
-    assert!(prompt.contains("abc123"), "prompt should contain raw output content");
-    assert!(prompt.contains("## Condensed output"), "prompt should end with output marker");
+    // System message contains role and rules (no few-shot example)
+    assert!(
+        system.contains("condenser"),
+        "system should describe the role"
+    );
+    assert!(
+        system.contains("container"),
+        "system should have category-specific rules"
+    );
+    assert!(
+        system.contains("No commands, no explanations"),
+        "system should instruct output-only"
+    );
+    // No few-shot examples (they caused small models to parrot)
+    assert!(
+        !system.contains("INPUT:"),
+        "system should not have example input (removed)"
+    );
+
+    // User message contains the actual data to condense
+    assert!(
+        user.contains("docker ps"),
+        "user should mention the command"
+    );
+    assert!(
+        user.contains("abc123"),
+        "user should contain raw output content"
+    );
 }
 
 #[test]
 fn prompt_uses_category_specific_rules() {
-    let git_prompt = build_prompt("git log", "commit abc123\nAuthor: test");
-    assert!(git_prompt.contains("branch"), "git prompt should mention branch");
+    let (git_sys, _) = build_chat_messages("git log", "commit abc123\nAuthor: test");
+    assert!(
+        git_sys.contains("branch"),
+        "git system msg should mention branch"
+    );
 
-    let docker_prompt = build_prompt("docker ps", "CONTAINER ID");
-    assert!(docker_prompt.contains("container"), "docker prompt should mention containers");
+    let (docker_sys, _) = build_chat_messages("docker ps", "CONTAINER ID");
+    assert!(
+        docker_sys.contains("container"),
+        "docker system msg should mention containers"
+    );
 
-    let build_prompt_text = build_prompt("cargo test", "running 5 tests\ntest ok");
-    assert!(build_prompt_text.contains("error"), "build prompt should mention errors");
+    let (build_sys, _) = build_chat_messages("cargo test", "running 5 tests\ntest ok");
+    assert!(
+        build_sys.contains("error"),
+        "build system msg should mention errors"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -159,28 +198,30 @@ fn prompt_uses_category_specific_rules() {
 fn validation_accepts_good_condensation() {
     let raw = "This is a verbose output with lots of unnecessary detail that goes on and on.";
     let condensed = "Verbose output summary.";
-    assert!(validate_llm_output(raw, condensed).is_ok());
+    assert!(validate_llm_output("whoami", raw, condensed).is_ok());
 }
 
 #[test]
 fn validation_rejects_expansion() {
     let raw = "Short.";
     let expanded = "This is a much longer expansion that the LLM produced instead of condensing the original output which was just the word Short.";
-    assert!(validate_llm_output(raw, expanded).is_err());
+    assert!(validate_llm_output("whoami", raw, expanded).is_err());
 }
 
 #[test]
-fn validation_rejects_chatbot_preamble() {
-    let raw = "Some verbose output that needs condensing and is long enough to pass the length check.";
-    let with_preamble = "Here is the condensed version.";
-    assert!(validate_llm_output(raw, with_preamble).is_err());
+fn validation_rejects_refusal() {
+    let raw =
+        "Some verbose output that needs condensing and is long enough to pass the length check.";
+    let with_refusal = "I apologize, but I cannot condense this output.";
+    assert!(validate_llm_output("whoami", raw, with_refusal).is_err());
 }
 
 #[test]
 fn validation_rejects_apology() {
-    let raw = "Error: connection refused at localhost:5432 with extended details about the failure.";
+    let raw =
+        "Error: connection refused at localhost:5432 with extended details about the failure.";
     let apology = "I apologize, connection refused.";
-    assert!(validate_llm_output(raw, apology).is_err());
+    assert!(validate_llm_output("whoami", raw, apology).is_err());
 }
 
 // ---------------------------------------------------------------------------
@@ -199,7 +240,7 @@ fn llm_live_generate_and_validate() {
         return;
     }
 
-    use terse::llm::ollama::OllamaClient;
+    use terse::llm::ollama::{ChatMessage, OllamaClient};
 
     let config = SmartPathConfig {
         enabled: true,
@@ -209,15 +250,26 @@ fn llm_live_generate_and_validate() {
     let client = OllamaClient::from_config(&config);
 
     // Health check
-    assert!(client.is_healthy(), "Ollama should be reachable and have models");
+    assert!(
+        client.is_healthy(),
+        "Ollama should be reachable and have models"
+    );
 
-    // Generate
-    let prompt = build_prompt(
+    // Chat API test
+    let (system, user) = build_chat_messages(
         "git status",
         "On branch main\nYour branch is up to date with 'origin/main'.\n\nnothing to commit, working tree clean\n",
     );
-    let result = client.generate(&prompt);
-    assert!(result.is_ok(), "generate should succeed: {:?}", result.err());
+    let messages = vec![
+        ChatMessage::system(system),
+        ChatMessage::user(user),
+    ];
+    let result = client.chat(&messages);
+    assert!(
+        result.is_ok(),
+        "chat should succeed: {:?}",
+        result.err()
+    );
 
     let output = result.unwrap();
     assert!(!output.trim().is_empty(), "LLM output should be non-empty");
@@ -256,7 +308,11 @@ no changes added to commit (use \"git add\" and/or \"git commit -a\")\n";
 
     unsafe { remove_env("TERSE_SMART_PATH") };
 
-    assert!(result.is_ok(), "optimize_with_llm should succeed: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "optimize_with_llm should succeed: {:?}",
+        result.err()
+    );
     let llm_result = result.unwrap();
     assert!(
         llm_result.output.len() < raw_output.len(),

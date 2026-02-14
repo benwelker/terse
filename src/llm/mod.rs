@@ -10,7 +10,8 @@
 /// The smart path is **disabled by default** and must be explicitly enabled:
 ///
 /// - Environment variable: `TERSE_SMART_PATH=1`
-/// - JSON config file: `~/.terse/config.json` → `{ "smart_path": { "enabled": true } }`
+/// - TOML config file: `~/.terse/config.toml` → `[smart_path] enabled = true`
+/// - Legacy JSON config: `~/.terse/config.json` (deprecated)
 ///
 /// See [`config::SmartPathConfig`] for full configuration options.
 ///
@@ -35,9 +36,9 @@ pub mod prompts;
 pub mod validation;
 
 use config::SmartPathConfig;
-use ollama::OllamaClient;
-use prompts::build_prompt;
-use validation::validate_llm_output;
+use ollama::{ChatMessage, OllamaClient};
+use prompts::build_chat_messages;
+use validation::{strip_command_lines, strip_preamble, validate_llm_output};
 
 /// Result of an LLM optimization attempt.
 #[derive(Debug, Clone)]
@@ -66,6 +67,7 @@ pub struct LlmResult {
 ///
 /// This is called from the hook to decide whether to rewrite commands that
 /// have no rule-based optimizer.
+#[allow(dead_code)]
 pub fn is_smart_path_available() -> bool {
     let config = SmartPathConfig::load();
     if !config.enabled {
@@ -96,14 +98,22 @@ pub fn optimize_with_llm(command: &str, raw_output: &str) -> Result<LlmResult> {
     let client = OllamaClient::from_config(&config);
     let category = prompts::classify_command(command);
 
-    let prompt = build_prompt(command, raw_output);
+    let (system_msg, user_msg) = build_chat_messages(command, raw_output);
+    let messages = vec![
+        ChatMessage::system(system_msg),
+        ChatMessage::user(user_msg),
+    ];
 
     let start = Instant::now();
-    let llm_output = client.generate(&prompt)?;
+    let llm_output = client.chat(&messages)?;
     let latency_ms = start.elapsed().as_millis() as u64;
 
+    // Strip common LLM preamble and stray command lines before validation
+    let llm_output = strip_preamble(&llm_output);
+    let llm_output = strip_command_lines(&llm_output);
+
     // Validate before accepting
-    validate_llm_output(raw_output, &llm_output)?;
+    validate_llm_output(command, raw_output, &llm_output)?;
 
     let original_tokens = crate::utils::token_counter::estimate_tokens(raw_output);
     let optimized_tokens = crate::utils::token_counter::estimate_tokens(&llm_output);

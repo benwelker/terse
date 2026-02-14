@@ -195,8 +195,12 @@ fn compute_command_stats(entries: &[CommandLogEntry]) -> Vec<CommandStat> {
 
     // Sort by total savings (original - optimized) descending
     stats.sort_by(|a, b| {
-        let savings_a = a.total_original_tokens.saturating_sub(a.total_optimized_tokens);
-        let savings_b = b.total_original_tokens.saturating_sub(b.total_optimized_tokens);
+        let savings_a = a
+            .total_original_tokens
+            .saturating_sub(a.total_optimized_tokens);
+        let savings_b = b
+            .total_original_tokens
+            .saturating_sub(b.total_optimized_tokens);
         savings_b.cmp(&savings_a)
     });
 
@@ -215,10 +219,7 @@ pub fn discover_candidates(days: Option<u32>) -> Vec<DiscoveryCandidate> {
     let entries = logger::read_entries_since_days(days);
 
     // Only include commands that went through smart or passthrough paths
-    let non_fast: Vec<&CommandLogEntry> = entries
-        .iter()
-        .filter(|e| e.path != "fast")
-        .collect();
+    let non_fast: Vec<&CommandLogEntry> = entries.iter().filter(|e| e.path != "fast").collect();
 
     let mut groups: HashMap<String, Vec<&CommandLogEntry>> = HashMap::new();
     for entry in &non_fast {
@@ -418,10 +419,7 @@ mod tests {
         // Discovery should only find non-fast-path commands
         let entries = sample_entries();
 
-        let non_fast: Vec<&CommandLogEntry> = entries
-            .iter()
-            .filter(|e| e.path != "fast")
-            .collect();
+        let non_fast: Vec<&CommandLogEntry> = entries.iter().filter(|e| e.path != "fast").collect();
 
         // npm test (smart) and echo (passthrough) should be candidates
         assert_eq!(non_fast.len(), 2);

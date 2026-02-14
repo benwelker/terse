@@ -6,10 +6,10 @@ pub mod git;
 
 pub use git::GitOptimizer;
 
+/// Output produced by an optimizer after post-processing raw command output.
 #[derive(Debug, Clone)]
 pub struct OptimizedOutput {
     pub output: String,
-    pub original_tokens: usize,
     pub optimized_tokens: usize,
     pub optimizer_used: String,
 }
@@ -18,11 +18,11 @@ pub struct OptimizedOutput {
 ///
 /// Created once by the [`OptimizerRegistry`] to eliminate redundant calls to
 /// [`extract_core_command`](crate::matching::extract_core_command). Optimizers
-/// use `core` for matching/routing and `original` for execution.
+/// use `core` for matching/routing and `original` for context.
 #[derive(Debug, Clone, Copy)]
 pub struct CommandContext<'a> {
     /// The full original command as sent by Claude Code.
-    /// Used for execution — preserves `cd`, env vars, pipes, etc.
+    /// Preserved for context (e.g., `cd /repo && git status`).
     pub original: &'a str,
 
     /// The core command extracted by the matching engine.
@@ -42,13 +42,9 @@ impl<'a> CommandContext<'a> {
 
 /// Trait for command optimizers.
 ///
-/// Each optimizer handles a set of commands. The registry passes a
-/// [`CommandContext`] with the pre-extracted core command so optimizers never
-/// need to call `extract_core_command` themselves.
-///
-/// When invoked via [`execute_and_optimize`](Optimizer::execute_and_optimize),
-/// the optimizer runs the command (potentially as a substituted variant) and
-/// returns the optimized output along with token analytics.
+/// Each optimizer handles a set of commands. The router runs the command
+/// first, then passes the raw output to the optimizer for post-processing.
+/// Optimizers transform the output into a more compact representation.
 pub trait Optimizer {
     fn name(&self) -> &'static str;
 
@@ -57,19 +53,15 @@ pub trait Optimizer {
     /// Use `ctx.core` for prefix matching (already lowered/extracted).
     fn can_handle(&self, ctx: &CommandContext) -> bool;
 
-    /// Execute the command (or an optimized substitute) and return the
-    /// optimized output with token analytics.
+    /// Post-process raw command output into a compact, token-efficient form.
     ///
-    /// The optimizer decides the strategy:
-    /// - **Command substitution**: run a more compact command instead
-    ///   (e.g., `git status --short --branch` instead of `git status`)
-    /// - **Output post-processing**: run the original command, then
-    ///   transform the output (e.g., truncate a large diff)
-    ///
-    /// Use `ctx.original` when executing — it preserves `cd`, env vars, etc.
-    fn execute_and_optimize(&self, ctx: &CommandContext) -> Result<OptimizedOutput>;
+    /// The router has already executed the command and passes the raw output.
+    /// The optimizer transforms it (e.g., compacting a diff, summarizing
+    /// branch listings) and returns the optimized output with token analytics.
+    fn optimize_output(&self, ctx: &CommandContext, raw_output: &str) -> Result<OptimizedOutput>;
 }
 
+/// Registry of all available optimizers.
 pub struct OptimizerRegistry {
     optimizers: Vec<Box<dyn Optimizer>>,
 }
@@ -96,13 +88,10 @@ impl OptimizerRegistry {
         self.optimizers.iter().any(|o| o.can_handle(&ctx))
     }
 
-    /// Find the first optimizer that can handle the command, execute it, and
-    /// return the optimized output. Returns `None` if no optimizer matches or
-    /// all matching optimizers fail.
-    ///
-    /// Extracts the core command once via [`CommandContext`] — individual
-    /// optimizers never call `extract_core_command` themselves.
-    pub fn execute_first(&self, command: &str) -> Option<OptimizedOutput> {
+    /// Find the first optimizer that can handle the command, post-process the
+    /// raw output, and return the optimized result. Returns `None` if no
+    /// optimizer matches or all matching optimizers fail.
+    pub fn optimize_first(&self, command: &str, raw_output: &str) -> Option<OptimizedOutput> {
         let ctx = CommandContext::new(command);
 
         for optimizer in &self.optimizers {
@@ -110,7 +99,7 @@ impl OptimizerRegistry {
                 continue;
             }
 
-            if let Ok(result) = optimizer.execute_and_optimize(&ctx) {
+            if let Ok(result) = optimizer.optimize_output(&ctx, raw_output) {
                 return Some(result);
             }
         }

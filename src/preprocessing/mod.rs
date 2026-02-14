@@ -46,19 +46,21 @@ pub struct PreprocessedOutput {
 // Pipeline orchestrator
 // ---------------------------------------------------------------------------
 
-/// Default maximum output size after preprocessing (bytes).
-/// If the output still exceeds this after noise/path/dedup, truncation kicks in.
-const DEFAULT_MAX_OUTPUT_BYTES: usize = 32 * 1024; // 32 KB
-
 /// Run the full preprocessing pipeline on raw command output.
 ///
 /// Each stage is applied in order. The pipeline is infallible — if any stage
 /// encounters unexpected input it returns the text unchanged.
 ///
+/// The truncation limit is read from the unified config system
+/// (`preprocessing.max_output_bytes`). If no config is present, the built-in
+/// default (128 KB) is used.
+///
 /// `command` is provided for context-aware decisions (e.g. path filtering
 /// heuristics) but may be unused in early stages.
 pub fn preprocess(raw: &str, _command: &str) -> PreprocessedOutput {
-    preprocess_with_max(raw, _command, DEFAULT_MAX_OUTPUT_BYTES)
+    let cfg = crate::config::load();
+    let max_bytes = cfg.preprocessing.max_output_bytes;
+    preprocess_with_max(raw, _command, max_bytes)
 }
 
 /// Run the preprocessing pipeline with a custom max output size (bytes).

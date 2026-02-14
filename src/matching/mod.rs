@@ -10,7 +10,7 @@
 //! The matching engine is used in two places:
 //! 1. **Hook** (`terse hook`): determines if any optimizer can handle the command
 //!    and whether the command is already a terse invocation (loop guard).
-//! 2. **Optimizers**: `can_handle()` and `execute_and_optimize()` use the extracted
+//! 2. **Optimizers**: `can_handle()` and `optimize_output()` use the extracted
 //!    core command for decision-making while passing the full original command to
 //!    `run_shell_command()` so that `cd`, env vars, pipes, etc. execute correctly.
 //!
@@ -117,12 +117,8 @@ pub fn is_terse_invocation(command: &str) -> bool {
     let after_terse = &lower[terse_pos + 5..]; // skip "terse"
 
     // Skip optional ".exe" suffix and optional closing quote
-    let after_suffix = after_terse
-        .strip_prefix(".exe")
-        .unwrap_or(after_terse);
-    let after_quote = after_suffix
-        .strip_prefix('"')
-        .unwrap_or(after_suffix);
+    let after_suffix = after_terse.strip_prefix(".exe").unwrap_or(after_terse);
+    let after_quote = after_suffix.strip_prefix('"').unwrap_or(after_suffix);
 
     // Must be followed by whitespace then "run"
     let after_ws = after_quote.trim_start();
@@ -169,8 +165,7 @@ fn ascii_prefix_strip<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
 /// Strip a single layer of matching outer quotes from a string.
 fn strip_outer_quotes(s: &str) -> &str {
     if s.len() >= 2
-        && ((s.starts_with('"') && s.ends_with('"'))
-            || (s.starts_with('\'') && s.ends_with('\'')))
+        && ((s.starts_with('"') && s.ends_with('"')) || (s.starts_with('\'') && s.ends_with('\'')))
     {
         return &s[1..s.len() - 1];
     }
@@ -239,10 +234,7 @@ fn strip_env_assignments(s: &str) -> &str {
 
         // Everything before = must be a valid shell identifier
         let key = &trimmed[..eq_pos];
-        if !key
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-        {
+        if !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
             return trimmed;
         }
 
@@ -300,10 +292,7 @@ mod tests {
 
     #[test]
     fn cd_prefix_with_ampersand() {
-        assert_eq!(
-            extract_core_command("cd /repo && git status"),
-            "git status"
-        );
+        assert_eq!(extract_core_command("cd /repo && git status"), "git status");
     }
 
     #[test]
@@ -316,10 +305,7 @@ mod tests {
 
     #[test]
     fn cd_prefix_with_semicolon() {
-        assert_eq!(
-            extract_core_command("cd /repo; git status"),
-            "git status"
-        );
+        assert_eq!(extract_core_command("cd /repo; git status"), "git status");
     }
 
     #[test]
@@ -361,26 +347,17 @@ mod tests {
 
     #[test]
     fn subshell_wrapper() {
-        assert_eq!(
-            extract_core_command("(cd /repo && git diff)"),
-            "git diff"
-        );
+        assert_eq!(extract_core_command("(cd /repo && git diff)"), "git diff");
     }
 
     #[test]
     fn bash_wrapper_double_quotes() {
-        assert_eq!(
-            extract_core_command("bash -c \"git status\""),
-            "git status"
-        );
+        assert_eq!(extract_core_command("bash -c \"git status\""), "git status");
     }
 
     #[test]
     fn sh_wrapper_single_quotes() {
-        assert_eq!(
-            extract_core_command("sh -c 'git status'"),
-            "git status"
-        );
+        assert_eq!(extract_core_command("sh -c 'git status'"), "git status");
     }
 
     #[test]
@@ -604,12 +581,18 @@ mod tests {
     #[test]
     fn strip_env_does_not_eat_flags_with_equals() {
         // --format=oneline starts with -, not a letter → immediately returns
-        assert_eq!(strip_env_assignments("--format=oneline"), "--format=oneline");
+        assert_eq!(
+            strip_env_assignments("--format=oneline"),
+            "--format=oneline"
+        );
     }
 
     #[test]
     fn strip_env_handles_path_value() {
-        assert_eq!(strip_env_assignments("HOME=/tmp git status").trim(), "git status");
+        assert_eq!(
+            strip_env_assignments("HOME=/tmp git status").trim(),
+            "git status"
+        );
     }
 
     #[test]

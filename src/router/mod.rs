@@ -1,38 +1,31 @@
-/// Router — central decision engine for TERSE's dual-path optimization.
+/// Router — central decision engine for TERSE's optimization pipeline.
 ///
-/// The router encapsulates all routing logic that was previously spread across
-/// the hook and run modules. It provides two entry points:
+/// The router provides two entry points:
 ///
-/// - [`decide_hook`] — pre-execution decision for the hook (rewrite or passthrough)
-/// - [`execute_run`] — post-execution pipeline for `terse run` (fast → smart → passthrough)
-///
-/// Internally the router uses:
-/// - [`classifier`](crate::safety::classifier) to reject destructive/editor commands
-/// - [`CircuitBreaker`](crate::safety::circuit_breaker::CircuitBreaker) to disable
-///   paths that are failing repeatedly
-/// - [`OptimizerRegistry`](crate::optimizers::OptimizerRegistry) for rule-based fast path
-/// - [`llm`](crate::llm) module for smart path
+/// - [`decide_hook`] — pre-execution gate for the hook (rewrite or passthrough)
+/// - [`execute_run`] — post-execution pipeline for `terse run`
 ///
 /// # Execution Model
 ///
-/// The hook and run operate at different stages:
-///
 /// ```text
-/// ┌─────────────────┐     ┌─────────────────────────────┐
-/// │  terse hook      │     │  terse run                   │
-/// │  (pre-execution) │     │  (post-execution)            │
-/// │                  │     │                              │
-/// │  classify cmd    │     │  1. Try fast path optimizer  │
-/// │  check breakers  │     │  2. Run raw command          │
-/// │  check optimizer │     │  3. Check output size        │
-/// │  check smart     │────▶│  4. Try smart path (LLM)    │
-/// │  → Rewrite/Pass  │     │  5. Fallback to passthrough  │
-/// └─────────────────┘     └─────────────────────────────┘
+/// ┌─────────────────┐     ┌─────────────────────────────────┐
+/// │  terse hook      │     │  terse run                       │
+/// │  (pre-execution) │     │  (post-execution)                │
+/// │                  │     │                                  │
+/// │  safety gates:   │     │  1. Run original command          │
+/// │  - config        │     │  2. Preprocess output (always)   │
+/// │  - loop guard    │────▶│  3. Size-based path decision     │
+/// │  - heredoc       │     │  4. Fast path / Smart path / PT  │
+/// │  - classifier    │     │                                  │
+/// │  → Rewrite/Pass  │     └─────────────────────────────────┘
+/// └─────────────────┘
 /// ```
 pub mod decision;
 
 use anyhow::{Context, Result};
 
+use crate::config;
+use crate::config::schema::Mode;
 use crate::llm;
 use crate::llm::config::SmartPathConfig;
 use crate::matching;
@@ -46,16 +39,18 @@ use crate::utils::token_counter::estimate_tokens;
 pub use decision::{HookDecision, OptimizationPath, PassthroughReason};
 
 // ---------------------------------------------------------------------------
-// Output size thresholds (bytes)
+// Output size thresholds — loaded from config at runtime
 // ---------------------------------------------------------------------------
 
-/// Outputs smaller than this are not worth optimizing — passthrough.
-const PASSTHROUGH_THRESHOLD_BYTES: usize = 2 * 1024; // 2 KB
-
-/// Outputs between `PASSTHROUGH_THRESHOLD_BYTES` and this value are eligible
-/// for the fast path (rule-based optimizers only).
-/// Outputs at or above this value are eligible for the smart path (LLM).
-const SMART_PATH_THRESHOLD_BYTES: usize = 10 * 1024; // 10 KB
+/// Load output thresholds from config. Falls back to built-in defaults
+/// if no config file is present.
+fn load_thresholds() -> (usize, usize) {
+    let cfg = config::load();
+    (
+        cfg.output_thresholds.passthrough_below_bytes,
+        cfg.output_thresholds.smart_path_above_bytes,
+    )
+}
 
 // ---------------------------------------------------------------------------
 // Execution result
@@ -78,14 +73,17 @@ pub struct ExecutionResult {
     pub optimizer_name: String,
     /// LLM latency in milliseconds (only populated for smart path).
     pub latency_ms: Option<u64>,
-    /// Bytes removed by preprocessing (only set for smart path).
+    /// Bytes removed by preprocessing.
     pub preprocessing_bytes_removed: Option<usize>,
-    /// Percentage of bytes removed by preprocessing (only set for smart path).
+    /// Percentage of bytes removed by preprocessing.
     pub preprocessing_pct: Option<f64>,
+    /// Diagnostic: error from a higher-priority path that was attempted but
+    /// failed before falling through to the current path.
+    pub fallback_reason: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
-// Hook-level routing
+// Hook-level routing (safety gates only)
 // ---------------------------------------------------------------------------
 
 /// Make the pre-execution hook routing decision.
@@ -94,15 +92,30 @@ pub struct ExecutionResult {
 /// [`HookDecision`] indicating whether to rewrite the command to `terse run`
 /// or pass through unchanged.
 ///
+/// The hook only applies safety gates — the actual optimization path
+/// (fast/smart/passthrough) is determined post-execution based on output
+/// size after preprocessing.
+///
 /// # Decision Order
 ///
-/// 1. Loop guard: already a terse invocation → passthrough
-/// 2. Heredoc: structurally complex → passthrough
-/// 3. Classifier: destructive/editor command → passthrough
-/// 4. Circuit breaker + optimizer registry → fast path rewrite
-/// 5. Circuit breaker + smart path availability → smart path rewrite
-/// 6. Nothing available → passthrough
+/// 1. Config gates: enabled, mode, safe_mode
+/// 2. Loop guard: already a terse invocation → passthrough
+/// 3. Heredoc: structurally complex → passthrough
+/// 4. Classifier: destructive/editor command → passthrough
+/// 5. Otherwise → rewrite to `terse run`
 pub fn decide_hook(command: &str) -> HookDecision {
+    // 0. Config gates
+    let cfg = config::load();
+    if !cfg.general.enabled {
+        return HookDecision::Passthrough(PassthroughReason::NoPathAvailable);
+    }
+    if cfg.general.mode == Mode::Passthrough {
+        return HookDecision::Passthrough(PassthroughReason::NoPathAvailable);
+    }
+    if cfg.general.safe_mode {
+        return HookDecision::Passthrough(PassthroughReason::NoPathAvailable);
+    }
+
     // 1. Loop guard
     if matching::is_terse_invocation(command) {
         return HookDecision::Passthrough(PassthroughReason::TerseInvocation);
@@ -118,25 +131,9 @@ pub fn decide_hook(command: &str) -> HookDecision {
         return HookDecision::Passthrough(PassthroughReason::NeverOptimize);
     }
 
-    let cb = CircuitBreaker::load();
-    let registry = OptimizerRegistry::new();
-
-    // 4. Fast path: rule-based optimizer available + circuit breaker open
-    if cb.is_allowed(PathId::FastPath) && registry.can_handle(command) {
-        return HookDecision::Rewrite {
-            expected_path: OptimizationPath::FastPath,
-        };
-    }
-
-    // 5. Smart path: feature enabled + Ollama healthy + circuit breaker open
-    if cb.is_allowed(PathId::SmartPath) && llm::is_smart_path_available() {
-        return HookDecision::Rewrite {
-            expected_path: OptimizationPath::SmartPath,
-        };
-    }
-
-    // 6. Nothing available
-    HookDecision::Passthrough(PassthroughReason::NoPathAvailable)
+    // 4. All safety gates passed — route through terse run.
+    //    The actual path is decided post-execution based on output size.
+    HookDecision::Rewrite
 }
 
 // ---------------------------------------------------------------------------
@@ -145,59 +142,46 @@ pub fn decide_hook(command: &str) -> HookDecision {
 
 /// Execute a command through the full optimization pipeline.
 ///
-/// Called from `terse run`. The router tries each path in priority order:
+/// Called from `terse run`. The pipeline is linear:
 ///
-/// 1. **Fast path** — rule-based optimizer (if circuit breaker allows)
-/// 2. **Raw execution** — run the original command to capture output
-/// 3. **Smart path** — LLM optimization (if output large enough + circuit breaker allows)
-/// 4. **Passthrough** — return raw output unchanged
+/// 1. **Run** the original command
+/// 2. **Preprocess** the output (always — strip noise, dedup, truncate)
+/// 3. **Size-based routing** using preprocessed output size:
+///    - Below passthrough threshold → passthrough
+///    - Above smart path threshold → smart path (preferred), fast path fallback
+///    - Between thresholds → fast path
+///    - Otherwise → passthrough
 ///
 /// Records success/failure on the circuit breaker after each path attempt.
 pub fn execute_run(command: &str) -> Result<ExecutionResult> {
-    let mut cb = CircuitBreaker::load();
+    let cfg = config::load();
+    let mut cb = CircuitBreaker::from_config(
+        cfg.router.circuit_breaker_window,
+        cfg.router.circuit_breaker_threshold,
+        cfg.router.circuit_breaker_cooldown_secs,
+    );
     let registry = OptimizerRegistry::new();
+    let (passthrough_threshold, smart_path_threshold) = load_thresholds();
+    let mode = &cfg.general.mode;
 
-    // --- Fast path ---
-    if cb.is_allowed(PathId::FastPath) && registry.can_handle(command) {
-        match registry.execute_first(command) {
-            Some(result) => {
-                cb.record_success(PathId::FastPath);
-                return Ok(ExecutionResult {
-                    original_tokens: result.original_tokens,
-                    optimized_tokens: result.optimized_tokens,
-                    path: OptimizationPath::FastPath,
-                    optimizer_name: result.optimizer_used,
-                    output: result.output,
-                    stderr: String::new(),
-                    latency_ms: None,
-                    preprocessing_bytes_removed: None,
-                    preprocessing_pct: None,
-                });
-            }
-            None => {
-                // Optimizer matched (can_handle=true) but execution failed.
-                cb.record_failure(PathId::FastPath);
-            }
-        }
-    }
+    let config_allows_optimization =
+        cfg.general.enabled && *mode != Mode::Passthrough && !cfg.general.safe_mode;
 
-    // --- Run the original command raw ---
-    let raw_output = run_shell_command(command)
-        .context("failed executing command in router")?;
+    // --- Step 1: Run the original command ---
+    let raw_output = run_shell_command(command).context("failed executing command in router")?;
     let raw_text = combine_stdout_stderr(&raw_output.stdout, &raw_output.stderr);
     let raw_tokens = estimate_tokens(&raw_text);
-    let output_bytes = raw_text.len();
 
-    // --- Size-based routing (byte thresholds) ---
-    //
-    // < 2 KB   → passthrough (not worth optimizing)
-    // 2–10 KB  → fast path eligible (rule-based post-processing only)
-    // ≥ 10 KB  → smart path eligible (LLM)
-    //
-    // Note: command-substitution fast path already ran above (pre-execution).
-    // The size gates below apply to *output post-processing* paths.
+    // --- Step 2: Preprocess output (always) ---
+    let preprocessed = preprocessing::preprocess(&raw_text, command);
+    let pp_bytes_removed = preprocessed.bytes_removed;
+    let pp_pct = preprocessed.reduction_pct;
+    let output_bytes = preprocessed.text.len();
 
-    if output_bytes < PASSTHROUGH_THRESHOLD_BYTES {
+    // --- Step 3: Size-based path decision ---
+
+    // Small output or config disables optimization → passthrough
+    if output_bytes < passthrough_threshold || !config_allows_optimization {
         return Ok(ExecutionResult {
             original_tokens: raw_tokens,
             optimized_tokens: raw_tokens,
@@ -206,29 +190,34 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
             output: raw_output.stdout,
             stderr: raw_output.stderr,
             latency_ms: None,
-            preprocessing_bytes_removed: None,
-            preprocessing_pct: None,
+            preprocessing_bytes_removed: Some(pp_bytes_removed),
+            preprocessing_pct: Some(pp_pct),
+            fallback_reason: None,
         });
     }
 
-    // --- Smart path (≥ 10 KB) ---
     let smart_config = SmartPathConfig::load();
-    if output_bytes >= SMART_PATH_THRESHOLD_BYTES
+    let above_smart_threshold = output_bytes >= smart_path_threshold;
+
+    // Track smart path failure for diagnostics
+    let mut smart_path_error: Option<String> = None;
+
+    // Smart path: LLM optimization (preferred for large outputs)
+    //
+    // When the output exceeds the smart-path threshold the LLM will
+    // generally produce a better summary than rule-based optimizers, so
+    // we attempt it first. The fast path serves as a fallback if the LLM
+    // call fails.
+    if above_smart_threshold
+        && *mode != Mode::FastOnly
         && cb.is_allowed(PathId::SmartPath)
         && smart_config.enabled
     {
-        // Preprocess: strip noise before sending to LLM
-        let preprocessed = preprocessing::preprocess(&raw_text, command);
-        let pp_bytes_removed = preprocessed.bytes_removed;
-        let pp_pct = preprocessed.reduction_pct;
-
         match llm::optimize_with_llm(command, &preprocessed.text) {
             Ok(llm_result) => {
                 cb.record_success(PathId::SmartPath);
                 return Ok(ExecutionResult {
-                    // Token counts: original is from the *raw* output (before
-                    // preprocessing), optimized is from the LLM output.
-                    original_tokens: estimate_tokens(&raw_text),
+                    original_tokens: raw_tokens,
                     optimized_tokens: llm_result.optimized_tokens,
                     path: OptimizationPath::SmartPath,
                     optimizer_name: format!("llm:{}", llm_result.model),
@@ -237,16 +226,52 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
                     latency_ms: Some(llm_result.latency_ms),
                     preprocessing_bytes_removed: Some(pp_bytes_removed),
                     preprocessing_pct: Some(pp_pct),
+                    fallback_reason: None,
                 });
             }
-            Err(_) => {
+            Err(err) => {
+                let reason = format!("smart path failed: {err:#}");
+                eprintln!("[terse] {reason}");
+                smart_path_error = Some(reason);
                 cb.record_failure(PathId::SmartPath);
+                // Fall through to fast path as fallback.
+            }
+        }
+    }
+
+    // Fast path: rule-based optimizer
+    //
+    // Primary path for medium-sized outputs (between passthrough and smart
+    // thresholds). Also serves as a fallback when the smart path is
+    // unavailable or fails for large outputs.
+    if *mode != Mode::SmartOnly
+        && cb.is_allowed(PathId::FastPath)
+        && registry.can_handle(command)
+    {
+        match registry.optimize_first(command, &preprocessed.text) {
+            Some(result) => {
+                cb.record_success(PathId::FastPath);
+                return Ok(ExecutionResult {
+                    original_tokens: raw_tokens,
+                    optimized_tokens: result.optimized_tokens,
+                    path: OptimizationPath::FastPath,
+                    optimizer_name: result.optimizer_used,
+                    output: result.output,
+                    stderr: String::new(),
+                    latency_ms: None,
+                    preprocessing_bytes_removed: Some(pp_bytes_removed),
+                    preprocessing_pct: Some(pp_pct),
+                    fallback_reason: smart_path_error,
+                });
+            }
+            None => {
+                cb.record_failure(PathId::FastPath);
                 // Fall through to passthrough.
             }
         }
     }
 
-    // --- Passthrough (2–10 KB without smart path, or smart path failed) ---
+    // --- Passthrough (no optimizer matched, or paths failed/disabled) ---
     Ok(ExecutionResult {
         original_tokens: raw_tokens,
         optimized_tokens: raw_tokens,
@@ -255,8 +280,9 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
         output: raw_output.stdout,
         stderr: raw_output.stderr,
         latency_ms: None,
-        preprocessing_bytes_removed: None,
-        preprocessing_pct: None,
+        preprocessing_bytes_removed: Some(pp_bytes_removed),
+        preprocessing_pct: Some(pp_pct),
+        fallback_reason: smart_path_error,
     })
 }
 
@@ -269,9 +295,6 @@ pub fn execute_run(command: &str) -> Result<ExecutionResult> {
 pub struct PreviewResult {
     /// Hook-level decision.
     pub hook_decision: String,
-    /// Expected optimization path from hook analysis.
-    #[allow(dead_code)]
-    pub expected_path: OptimizationPath,
     /// Actual execution result (after running the command).
     pub execution: ExecutionResult,
 }
@@ -282,20 +305,15 @@ pub struct PreviewResult {
 /// the command through the router. Used by `terse test "command"`.
 pub fn preview(command: &str) -> Result<PreviewResult> {
     let hook = decide_hook(command);
-    let (hook_desc, expected) = match &hook {
-        HookDecision::Rewrite { expected_path } => {
-            (format!("rewrite (expected: {expected_path})"), *expected_path)
-        }
-        HookDecision::Passthrough(reason) => {
-            (format!("passthrough ({reason})"), OptimizationPath::Passthrough)
-        }
+    let hook_desc = match &hook {
+        HookDecision::Rewrite => "rewrite".to_string(),
+        HookDecision::Passthrough(reason) => format!("passthrough ({reason})"),
     };
 
     let execution = execute_run(command)?;
 
     Ok(PreviewResult {
         hook_decision: hook_desc,
-        expected_path: expected,
         execution,
     })
 }

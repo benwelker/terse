@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 
 use crate::analytics::events;
-use crate::hook::protocol::{HookRequest, HookResponse};
+use crate::hook::protocol::{HookRequest, HookResponse, ToolKind};
 use crate::router::{self, HookDecision};
 
 pub mod protocol;
@@ -48,34 +48,46 @@ fn handle_request(raw: &str) -> Result<HookResponse> {
     }
 
     let request: HookRequest = serde_json::from_str(raw).context("invalid hook request JSON")?;
+    let kind = request.tool_kind();
 
-    let is_bash = request.is_bash();
-    let command_preview = summarize_command(request.tool_input.command.as_deref());
     log_hook_event(&format!(
-        "request tool={} is_bash={} command=\"{}\"",
-        request.tool_name, is_bash, command_preview
+        "request tool={} kind={} command=\"{}\"",
+        request.tool_name,
+        kind,
+        summarize_command(request.tool_input.command.as_deref()),
     ));
 
-    if !is_bash {
-        events::log_passthrough(&request.tool_name, request.tool_input.command.as_deref(), "not bash");
-        return Ok(HookResponse::passthrough());
+    match kind {
+        ToolKind::Bash => handle_bash(&request),
+        ToolKind::Unsupported => {
+            events::log_passthrough(
+                &request.tool_name,
+                request.tool_input.command.as_deref(),
+                "unsupported tool",
+            );
+            Ok(HookResponse::passthrough())
+        }
     }
+}
 
+// ---------------------------------------------------------------------------
+// Per-tool handlers
+// ---------------------------------------------------------------------------
+
+/// Handle a Bash tool invocation — route through the optimizer pipeline.
+fn handle_bash(request: &HookRequest) -> Result<HookResponse> {
     let Some(command) = request.tool_input.command.as_deref() else {
         events::log_passthrough(&request.tool_name, None, "no command");
         return Ok(HookResponse::passthrough());
     };
 
-    // Delegate the routing decision to the central router.
     let decision = router::decide_hook(command);
 
     match &decision {
-        HookDecision::Rewrite { expected_path } => {
+        HookDecision::Rewrite => {
             let rewritten = build_rewrite_command(command)?;
-            log_hook_event(&format!(
-                "router decided rewrite (expected: {expected_path}); command: {rewritten}"
-            ));
-            events::log_rewrite(&request.tool_name, Some(command), &expected_path.to_string());
+            log_hook_event(&format!("router decided rewrite; command: {rewritten}"));
+            events::log_rewrite(&request.tool_name, Some(command));
             Ok(HookResponse::rewrite(&rewritten))
         }
         HookDecision::Passthrough(reason) => {

@@ -64,9 +64,9 @@ fn classify(lower: &str) -> Option<GitSubcommand> {
 /// with `flag=` for long options like `--pretty=format:...`.
 fn has_flag(text: &str, flags: &[&str]) -> bool {
     text.split_whitespace().any(|word| {
-        flags.iter().any(|&f| {
-            word == f || (f.starts_with("--") && word.starts_with(&format!("{f}=")))
-        })
+        flags
+            .iter()
+            .any(|&f| word == f || (f.starts_with("--") && word.starts_with(&format!("{f}="))))
     })
 }
 
@@ -124,51 +124,37 @@ impl Optimizer for GitOptimizer {
                 !has_flag(&lower, &["--short", "-s", "--porcelain", "-v", "--verbose"])
             }
             // Skip stat-only requests (already compact).
-            GitSubcommand::Diff => {
-                !has_flag(&lower, &["--stat", "--numstat", "--shortstat"])
-            }
+            GitSubcommand::Diff => !has_flag(&lower, &["--stat", "--numstat", "--shortstat"]),
             // Skip destructive / rename / copy branch operations.
-            GitSubcommand::Branch => {
-                !has_flag(&lower, &["-d", "-D", "-m", "-M", "-c", "-C"])
-            }
+            GitSubcommand::Branch => !has_flag(&lower, &["-d", "-D", "-m", "-M", "-c", "-C"]),
             // Skip if user specified a custom display format.
-            GitSubcommand::Show => {
-                !has_flag(&lower, &["--stat", "--format", "--pretty"])
-            }
+            GitSubcommand::Show => !has_flag(&lower, &["--stat", "--format", "--pretty"]),
             // Skip worktree action commands (add, remove, prune, etc.).
-            GitSubcommand::Worktree => {
-                !has_flag(
-                    &lower,
-                    &["add", "remove", "prune", "lock", "unlock", "move"],
-                )
-            }
+            GitSubcommand::Worktree => !has_flag(
+                &lower,
+                &["add", "remove", "prune", "lock", "unlock", "move"],
+            ),
             _ => true,
         }
     }
 
-    fn execute_and_optimize(&self, ctx: &CommandContext) -> Result<OptimizedOutput> {
+    fn optimize_output(&self, ctx: &CommandContext, raw_output: &str) -> Result<OptimizedOutput> {
         let lower = ctx.core.to_ascii_lowercase();
         let subcommand =
             classify(&lower).ok_or_else(|| anyhow!("git command not supported by optimizer"))?;
 
-        // Run the original command to capture raw output for token counting.
-        let raw = run_shell_command(ctx.original)?;
-        let raw_text = combine_output(&raw.stdout, &raw.stderr);
-        let original_tokens = estimate_tokens(&raw_text);
-
         let optimized = match subcommand {
             GitSubcommand::Status => optimize_status(ctx)?,
-            GitSubcommand::Log => optimize_log(ctx, &lower, &raw_text)?,
-            GitSubcommand::Diff => compact_diff_with_stat(&raw_text),
-            GitSubcommand::Branch => compact_git_branches(&raw_text),
-            GitSubcommand::Show => compact_git_show(&raw_text),
-            GitSubcommand::Stash => optimize_stash(&lower, &raw_text),
-            GitSubcommand::Worktree => compact_worktree_list(&raw_text),
-            GitSubcommand::ShortStatus => summarize_git_operation(&lower, &raw_text),
+            GitSubcommand::Log => optimize_log(ctx, &lower, raw_output)?,
+            GitSubcommand::Diff => compact_diff_with_stat(raw_output),
+            GitSubcommand::Branch => compact_git_branches(raw_output),
+            GitSubcommand::Show => compact_git_show(raw_output),
+            GitSubcommand::Stash => optimize_stash(&lower, raw_output),
+            GitSubcommand::Worktree => compact_worktree_list(raw_output),
+            GitSubcommand::ShortStatus => summarize_git_operation(&lower, raw_output),
         };
 
         Ok(OptimizedOutput {
-            original_tokens,
             optimized_tokens: estimate_tokens(&optimized),
             output: optimized,
             optimizer_used: self.name().to_string(),
@@ -182,11 +168,8 @@ impl Optimizer for GitOptimizer {
 
 /// Run `git status --porcelain -b` and format into a structured display.
 fn optimize_status(ctx: &CommandContext) -> Result<String> {
-    let output = optimize_with_substitution(
-        ctx.original,
-        "git status",
-        "git status --porcelain -b",
-    )?;
+    let output =
+        optimize_with_substitution(ctx.original, "git status", "git status --porcelain -b")?;
     Ok(format_porcelain_status(&output))
 }
 
@@ -373,11 +356,7 @@ fn generate_diff_stat(diff_text: &str) -> String {
             if !current_file.is_empty() {
                 files.push((current_file.clone(), added, removed));
             }
-            current_file = line
-                .split(" b/")
-                .nth(1)
-                .unwrap_or("unknown")
-                .to_string();
+            current_file = line.split(" b/").nth(1).unwrap_or("unknown").to_string();
             added = 0;
             removed = 0;
         } else if line.starts_with('+') && !line.starts_with("+++") {
@@ -420,9 +399,7 @@ fn compact_diff_hunks(diff_text: &str) -> String {
         if line.starts_with("diff --git") {
             hunk_lines = 0;
             kept.push(line);
-        } else if line.starts_with("index ")
-            || line.starts_with("--- ")
-            || line.starts_with("+++ ")
+        } else if line.starts_with("index ") || line.starts_with("--- ") || line.starts_with("+++ ")
         {
             kept.push(line);
         } else if line.starts_with("@@ ") {
@@ -640,10 +617,7 @@ fn compact_worktree_list(raw_output: &str) -> String {
 // ---------------------------------------------------------------------------
 
 fn summarize_git_operation(command: &str, raw_output: &str) -> String {
-    let action = command
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or("operation");
+    let action = command.split_whitespace().nth(1).unwrap_or("operation");
 
     let lower = raw_output.to_ascii_lowercase();
     let has_error =
@@ -679,15 +653,6 @@ fn optimize_with_substitution(command: &str, from: &str, to: &str) -> Result<Str
     Ok(combined)
 }
 
-fn combine_output(stdout: &str, stderr: &str) -> String {
-    match (stdout.is_empty(), stderr.is_empty()) {
-        (true, true) => String::new(),
-        (false, true) => stdout.to_string(),
-        (true, false) => stderr.to_string(),
-        (false, false) => format!("{stdout}\n{stderr}"),
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -714,7 +679,10 @@ mod tests {
             Some(GitSubcommand::ShortStatus)
         );
         assert_eq!(classify("git pull"), Some(GitSubcommand::ShortStatus));
-        assert_eq!(classify("git fetch --all"), Some(GitSubcommand::ShortStatus));
+        assert_eq!(
+            classify("git fetch --all"),
+            Some(GitSubcommand::ShortStatus)
+        );
         assert_eq!(classify("git add ."), Some(GitSubcommand::ShortStatus));
         assert_eq!(
             classify("git commit -m \"msg\""),
@@ -906,7 +874,8 @@ diff --git a/b.rs b/b.rs
 
     #[test]
     fn truncates_large_hunks() {
-        let mut diff = String::from("diff --git a/f.rs b/f.rs\n--- a/f.rs\n+++ b/f.rs\n@@ -1,30 +1,30 @@\n");
+        let mut diff =
+            String::from("diff --git a/f.rs b/f.rs\n--- a/f.rs\n+++ b/f.rs\n@@ -1,30 +1,30 @@\n");
         for i in 0..30 {
             diff.push_str(&format!("+line {i}\n"));
         }
@@ -931,10 +900,7 @@ diff --git a/b.rs b/b.rs
         }
         let compact = compact_diff_hunks(&diff);
         // Second hunk should be fully included (only 5 lines)
-        let hunk2_lines = compact
-            .lines()
-            .filter(|l| l.starts_with("+line2"))
-            .count();
+        let hunk2_lines = compact.lines().filter(|l| l.starts_with("+line2")).count();
         assert_eq!(hunk2_lines, 5);
     }
 
@@ -1051,8 +1017,7 @@ diff --git a/src/main.rs b/src/main.rs
 
     #[test]
     fn stash_nothing_to_stash() {
-        let result =
-            summarize_stash_operation("", "No local changes to save\n");
+        let result = summarize_stash_operation("", "No local changes to save\n");
         assert!(result.contains("nothing to stash"));
     }
 

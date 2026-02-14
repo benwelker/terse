@@ -1,12 +1,10 @@
+use terse::router::decide_hook;
 /// Router decision tests (Phase 4).
 ///
 /// Tests the routing logic for hook-level decisions, command classification,
 /// and circuit breaker behavior. Tests that require command execution
 /// (e.g., optimizer end-to-end) are in `optimizer_tests.rs`.
-use terse::router::decision::{
-    DecisionCache, HookDecision, OptimizationPath, PassthroughReason,
-};
-use terse::router::decide_hook;
+use terse::router::decision::{DecisionCache, HookDecision, OptimizationPath, PassthroughReason};
 use terse::safety::classifier::{self, CommandClass};
 
 // ---------------------------------------------------------------------------
@@ -35,10 +33,7 @@ fn classifier_rejects_editors() {
         classifier::classify("vim src/main.rs"),
         CommandClass::NeverOptimize
     );
-    assert_eq!(
-        classifier::classify("code ."),
-        CommandClass::NeverOptimize
-    );
+    assert_eq!(classifier::classify("code ."), CommandClass::NeverOptimize);
     assert_eq!(
         classifier::classify("nano ~/.bashrc"),
         CommandClass::NeverOptimize
@@ -63,10 +58,7 @@ fn classifier_allows_safe_commands() {
         classifier::classify("git status"),
         CommandClass::Optimizable
     );
-    assert_eq!(
-        classifier::classify("ls -la"),
-        CommandClass::Optimizable
-    );
+    assert_eq!(classifier::classify("ls -la"), CommandClass::Optimizable);
     assert_eq!(
         classifier::classify("cargo test"),
         CommandClass::Optimizable
@@ -166,9 +158,7 @@ fn hook_passthrough_for_redirects() {
 fn hook_rewrites_git_commands() {
     let decision = decide_hook("git status");
     match decision {
-        HookDecision::Rewrite { expected_path } => {
-            assert_eq!(expected_path, OptimizationPath::FastPath);
-        }
+        HookDecision::Rewrite => {}
         HookDecision::Passthrough(reason) => {
             panic!("expected rewrite for git status, got passthrough: {reason}");
         }
@@ -179,9 +169,7 @@ fn hook_rewrites_git_commands() {
 fn hook_rewrites_wrapped_git_commands() {
     let decision = decide_hook("cd /repo && git log");
     match decision {
-        HookDecision::Rewrite { expected_path } => {
-            assert_eq!(expected_path, OptimizationPath::FastPath);
-        }
+        HookDecision::Rewrite => {}
         HookDecision::Passthrough(reason) => {
             panic!("expected rewrite for wrapped git log, got passthrough: {reason}");
         }
@@ -189,17 +177,15 @@ fn hook_rewrites_wrapped_git_commands() {
 }
 
 #[test]
-fn hook_passthrough_for_unknown_command_without_smart_path() {
-    // Without the smart path enabled, unknown commands should passthrough.
-    // Explicitly disable smart path to avoid depending on environment.
-    unsafe { std::env::set_var("TERSE_SMART_PATH", "0") };
+fn hook_rewrites_unknown_safe_commands() {
+    // The simplified hook always rewrites safe commands — path decision
+    // happens post-execution based on output size.
     let decision = decide_hook("some-unknown-tool --verbose");
-    unsafe { std::env::remove_var("TERSE_SMART_PATH") };
     match decision {
+        HookDecision::Rewrite => {}
         HookDecision::Passthrough(reason) => {
-            assert_eq!(reason, PassthroughReason::NoPathAvailable);
+            panic!("expected rewrite for safe unknown command, got passthrough: {reason}");
         }
-        _ => panic!("expected passthrough for unknown command without smart path"),
     }
 }
 

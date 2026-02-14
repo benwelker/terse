@@ -6,12 +6,14 @@
 //! - `terse discover` — find high-frequency unoptimized commands
 //! - `terse health` — check Ollama, config, hook registration
 //! - `terse test "command"` — preview optimization pipeline
+//! - `terse config show|init|set|reset` — configuration management
 
 use anyhow::Result;
 use colored::Colorize;
 
 use crate::analytics::logger;
 use crate::analytics::reporter::{self, DiscoveryCandidate, Stats, TrendEntry};
+use crate::config;
 use crate::llm::config::SmartPathConfig;
 use crate::llm::ollama::OllamaClient;
 use crate::router;
@@ -69,16 +71,8 @@ fn print_stats_table(stats: &Stats) {
     let saved = stats
         .total_original_tokens
         .saturating_sub(stats.total_optimized_tokens);
-    println!(
-        "  {} {}",
-        "Total commands:".bold(),
-        stats.total_commands
-    );
-    println!(
-        "  {} {}",
-        "Tokens saved:  ".bold(),
-        format_number(saved)
-    );
+    println!("  {} {}", "Total commands:".bold(), stats.total_commands);
+    println!("  {} {}", "Tokens saved:  ".bold(), format_number(saved));
     println!(
         "  {} {:.1}%",
         "Avg savings:   ".bold(),
@@ -180,10 +174,7 @@ pub fn run_analyze(days: u32, format: OutputFormat) -> Result<()> {
     let trends = reporter::compute_trends(days);
 
     if trends.is_empty() {
-        println!(
-            "{}",
-            format!("No data in the last {} days.", days).yellow()
-        );
+        println!("{}", format!("No data in the last {} days.", days).yellow());
         return Ok(());
     }
 
@@ -298,8 +289,7 @@ fn print_discover_table(candidates: &[DiscoveryCandidate]) {
     println!();
     println!(
         "  {}",
-        "Build rule-based optimizers for the top commands to move them to the fast path."
-            .dimmed()
+        "Build rule-based optimizers for the top commands to move them to the fast path.".dimmed()
     );
 }
 
@@ -340,31 +330,66 @@ pub fn run_health() -> Result<()> {
     println!("{}", "TERSE Health Check".bold().cyan());
     println!("{}", "=".repeat(40));
 
+    // 0. Config file status
+    let global_exists = config::global_config_file()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    let project_exists = config::project_config_file()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    let cfg = config::load();
+    print_health_item(
+        "Global config",
+        global_exists,
+        if global_exists {
+            "~/.terse/config.toml found"
+        } else {
+            "not found (run `terse config init` to create)"
+        },
+    );
+    print_health_item(
+        "Project config",
+        project_exists,
+        if project_exists {
+            ".terse.toml found"
+        } else {
+            "none (optional)"
+        },
+    );
+    print_health_item(
+        "Mode / Profile",
+        true,
+        &format!("{:?} / {:?}", cfg.general.mode, cfg.general.profile),
+    );
+    if cfg.general.safe_mode {
+        print_health_item("Safe mode", false, "ON — no optimizations applied");
+    }
+
     // 1. Smart path config
-    let config = SmartPathConfig::load();
+    let smart_config = SmartPathConfig::load();
     print_health_item(
         "Smart path",
-        config.enabled,
-        if config.enabled {
+        smart_config.enabled,
+        if smart_config.enabled {
             "enabled"
         } else {
             "disabled (set TERSE_SMART_PATH=1 to enable)"
         },
     );
 
-    if config.enabled {
+    if smart_config.enabled {
         // 2. Ollama connectivity
-        let client = OllamaClient::from_config(&config);
+        let client = OllamaClient::from_config(&smart_config);
         let ollama_ok = client.is_healthy();
         let ollama_detail = if ollama_ok {
-            format!("reachable at {}", config.ollama_url)
+            format!("reachable at {}", smart_config.ollama_url)
         } else {
             "not reachable — is Ollama running?".to_string()
         };
         print_health_item("Ollama", ollama_ok, &ollama_detail);
 
         // 3. Model
-        print_health_item("Model", true, &config.model);
+        print_health_item("Model", true, &smart_config.model);
     }
 
     // 4. Circuit breaker
@@ -421,6 +446,83 @@ fn print_health_item(name: &str, ok: bool, detail: &str) {
 }
 
 // ---------------------------------------------------------------------------
+// terse config show | init | set | reset
+// ---------------------------------------------------------------------------
+
+/// Show the effective (merged) configuration as TOML.
+pub fn run_config_show() -> Result<()> {
+    let toml_str = config::show_effective_config()?;
+    println!("{}", "Effective TERSE Configuration".bold().cyan());
+    println!("{}", "=".repeat(50));
+    println!();
+    println!("{toml_str}");
+
+    // Show source info
+    let global_exists = config::global_config_file()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    let project_exists = config::project_config_file()
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    println!("{}", "Sources (highest priority last):".dimmed());
+    println!("  {} built-in defaults", "·".dimmed());
+    if global_exists {
+        println!("  {} {}", "✓".green(), "~/.terse/config.toml".dimmed());
+    } else {
+        println!(
+            "  {} {}",
+            "·".dimmed(),
+            "~/.terse/config.toml (not found)".dimmed()
+        );
+    }
+    if project_exists {
+        println!("  {} {}", "✓".green(), ".terse.toml".dimmed());
+    } else {
+        println!("  {} {}", "·".dimmed(), ".terse.toml (not found)".dimmed());
+    }
+    println!(
+        "  {} {}",
+        "·".dimmed(),
+        "TERSE_* environment variables".dimmed()
+    );
+
+    Ok(())
+}
+
+/// Initialize a default config file at `~/.terse/config.toml`.
+pub fn run_config_init(force: bool) -> Result<()> {
+    let path = config::init_config(force)?;
+    println!(
+        "{} Config written to {}",
+        "✓".green().bold(),
+        path.display()
+    );
+    println!(
+        "  {}",
+        "Edit the file to customize TERSE behavior.".dimmed()
+    );
+    Ok(())
+}
+
+/// Set a single configuration value in the global config file.
+pub fn run_config_set(key: &str, value: &str) -> Result<()> {
+    config::set_config_value(key, value)?;
+    println!("{} Set {} = {}", "✓".green().bold(), key.bold(), value,);
+    Ok(())
+}
+
+/// Reset configuration to defaults.
+pub fn run_config_reset() -> Result<()> {
+    let path = config::reset_config()?;
+    println!(
+        "{} Config reset to defaults at {}",
+        "✓".green().bold(),
+        path.display()
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // terse test
 // ---------------------------------------------------------------------------
 
@@ -433,16 +535,8 @@ pub fn run_test(command: &str) -> Result<()> {
 
     println!("{}", "TERSE Optimization Preview".bold().cyan());
     println!("{}", "=".repeat(50));
-    println!(
-        "  {} {}",
-        "Command:      ".bold(),
-        command
-    );
-    println!(
-        "  {} {}",
-        "Hook decision:".bold(),
-        preview.hook_decision
-    );
+    println!("  {} {}", "Command:      ".bold(), command);
+    println!("  {} {}", "Hook decision:".bold(), preview.hook_decision);
     println!(
         "  {} {}",
         "Path taken:   ".bold(),
@@ -454,6 +548,17 @@ pub fn run_test(command: &str) -> Result<()> {
         preview.execution.optimizer_name
     );
 
+    // Preprocessing stats
+    if let Some(pp_bytes) = preview.execution.preprocessing_bytes_removed {
+        let pp_pct = preview.execution.preprocessing_pct.unwrap_or(0.0);
+        println!(
+            "  {} {} bytes removed ({:.1}%)",
+            "Preprocessing:".bold(),
+            pp_bytes,
+            pp_pct,
+        );
+    }
+
     let savings = if preview.execution.original_tokens == 0 {
         0.0
     } else {
@@ -464,19 +569,31 @@ pub fn run_test(command: &str) -> Result<()> {
         (saved as f64 / preview.execution.original_tokens as f64) * 100.0
     };
 
+    // Use enough decimal places to avoid "100.0%" when savings are very
+    // high but not truly 100%. Cap display at 99.99% unless it's exactly 0.
+    let savings_display = if preview.execution.optimized_tokens == 0 {
+        savings // genuinely 100%
+    } else {
+        savings.min(99.99)
+    };
+
     println!(
-        "  {} {} → {} ({:.1}% savings)",
+        "  {} {} → {} ({:.2}% savings)",
         "Tokens:       ".bold(),
         preview.execution.original_tokens,
         preview.execution.optimized_tokens,
-        savings,
+        savings_display,
     );
 
     if let Some(latency) = preview.execution.latency_ms {
+        println!("  {} {}ms", "Latency:      ".bold(), latency);
+    }
+
+    if let Some(ref reason) = preview.execution.fallback_reason {
         println!(
-            "  {} {}ms",
-            "Latency:      ".bold(),
-            latency
+            "  {} {}",
+            "Fallback:     ".bold(),
+            reason.yellow()
         );
     }
 
@@ -565,4 +682,3 @@ mod tests {
         );
     }
 }
-

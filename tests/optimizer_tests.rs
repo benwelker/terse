@@ -76,7 +76,9 @@ fn git_optimizer_handles_complex_cd_env_combo() {
     let optimizer = GitOptimizer::new();
 
     assert!(optimizer.can_handle(&CommandContext::new("cd /home/user && LANG=C git status")));
-    assert!(optimizer.can_handle(&CommandContext::new("cd /project && GIT_DIR=/foo git diff --cached")));
+    assert!(optimizer.can_handle(&CommandContext::new(
+        "cd /project && GIT_DIR=/foo git diff --cached"
+    )));
 }
 
 #[test]
@@ -190,10 +192,7 @@ fn git_optimizer_skips_formatted_show() {
 
 #[test]
 fn matching_extracts_core_from_cd_chain() {
-    assert_eq!(
-        extract_core_command("cd /repo && git status"),
-        "git status"
-    );
+    assert_eq!(extract_core_command("cd /repo && git status"), "git status");
 }
 
 #[test]
@@ -220,6 +219,8 @@ fn terse_loop_guard_detects_invocation() {
 #[test]
 fn terse_loop_guard_rejects_non_terse() {
     assert!(!is_terse_invocation("git status"));
-    assert!(!is_terse_invocation("cd /my-terse-run-project && git status"));
+    assert!(!is_terse_invocation(
+        "cd /my-terse-run-project && git status"
+    ));
     assert!(!is_terse_invocation("terse stats"));
 }

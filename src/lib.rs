@@ -1,5 +1,6 @@
 pub mod analytics;
 pub mod cli;
+pub mod config;
 pub mod hook;
 pub mod llm;
 pub mod matching;
