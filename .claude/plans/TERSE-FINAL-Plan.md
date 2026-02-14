@@ -786,7 +786,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10) ⏭️ SKIP FOR NOW
+### Phase 9: Safety, Reliability & Error Handling Refinement (Week 9–10) ⏭️ NEXT
 
 **Goal:** Bulletproof error handling — TERSE never breaks a Claude Code session.
 
@@ -833,7 +833,7 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 ---
 
-### Phase 10: Cross-Platform & CI/CD (Week 10–11) ⏭️ NEXT
+### Phase 10: Cross-Platform & CI/CD (Week 10–11) ✅ COMPLETE
 
 **Goal:** Build and distribute for Windows, macOS, and Linux.
 
@@ -841,15 +841,15 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
 
 **Deliverables:**
 
-- [ ] Platform-specific command handling in `src/utils/process.rs`:
+- [x] Platform-specific command handling in `src/utils/process.rs`:
   - Windows `dir` ↔ Unix `ls`
   - Windows `type` ↔ Unix `cat`
   - Path separator normalization
-- [ ] Platform-specific optimizer logic using `#[cfg(target_os = "...")]` where needed
-- [ ] GitHub Actions CI workflow (`.github/workflows/ci.yml`):
+- [x] Platform-specific optimizer logic using `#[cfg(target_os = "...")]` where needed
+- [x] GitHub Actions CI workflow (`.github/workflows/ci.yml`):
   - Run `cargo test`, `cargo clippy`, `cargo fmt --check` on PR
   - Matrix: windows-latest, macos-latest, ubuntu-latest
-- [ ] GitHub Actions release workflow (`.github/workflows/release.yml`):
+- [x] GitHub Actions release workflow (`.github/workflows/release.yml`):
   - Trigger on tag push (`v*`)
   - Build matrix:
     - `x86_64-pc-windows-msvc` (Windows x64)
@@ -857,11 +857,11 @@ test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured
     - `aarch64-apple-darwin` (macOS ARM64)
     - `x86_64-unknown-linux-gnu` (Linux x64)
   - Upload binaries as release assets
-- [ ] Installation scripts:
+- [x] Installation scripts:
   - `install.ps1` (Windows PowerShell)
   - `install.sh` (macOS/Linux)
   - Both: download binary → place in `~/.terse/bin/` → create default config → check Ollama → register hook
-- [ ] Platform-specific test suite
+- [?] Platform-specific test suite
 
 **Success Criteria:**
 
