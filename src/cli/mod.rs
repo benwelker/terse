@@ -1013,11 +1013,7 @@ fn uninstall_remove_unix_path(bin_dir: &str) {
         // Filter out lines containing the terse bin dir or the terse comment
         let filtered: Vec<&str> = content
             .lines()
-            .filter(|line| {
-                !line.contains(bin_dir)
-                    && !line
-                        .contains("# terse")
-            })
+            .filter(|line| !line.contains(bin_dir) && !line.contains("# terse"))
             .collect();
 
         // Trim trailing blank lines
