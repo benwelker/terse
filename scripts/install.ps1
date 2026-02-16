@@ -197,26 +197,39 @@ try {
     }
 
     # Ensure hooks structure exists
-    if (-not $settings.PSObject.Properties.Name.Contains("hooks")) {
+    $settingsProps = @($settings.PSObject.Properties | ForEach-Object { $_.Name })
+    if (-not ($settingsProps -contains "hooks")) {
         $settings | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
+    } elseif ($null -eq $settings.hooks) {
+        $settings.hooks = [PSCustomObject]@{}
     }
-    if (-not $settings.hooks.PSObject.Properties.Name.Contains("PreToolUse")) {
+    if ($settings.hooks -is [hashtable]) {
+        $settings.hooks = [PSCustomObject]$settings.hooks
+    }
+
+    $hookProps = @($settings.hooks.PSObject.Properties | ForEach-Object { $_.Name })
+    if (-not ($hookProps -contains "PreToolUse")) {
         $settings.hooks | Add-Member -NotePropertyName "PreToolUse" -NotePropertyValue @()
+    } elseif ($null -eq $settings.hooks.PreToolUse) {
+        $settings.hooks.PreToolUse = @()
+    } else {
+        $settings.hooks.PreToolUse = @($settings.hooks.PreToolUse)
     }
 
     # Check if hook already registered (handle both old and new formats)
-    $existing = $settings.hooks.PreToolUse | Where-Object {
+    $existing = @($settings.hooks.PreToolUse | Where-Object {
+        $entryProps = @($_.PSObject.Properties | ForEach-Object { $_.Name })
         # New matcher-based format
-        if ($_.PSObject.Properties.Name.Contains("hooks")) {
+        if ($entryProps -contains "hooks") {
             $_.hooks | Where-Object { $_.command -like "*terse*hook*" }
         }
         # Legacy flat format
         elseif ($_.command -like "*terse*hook*") {
             $true
         }
-    }
+    })
 
-    if ($existing) {
+    if ($existing.Count -gt 0) {
         Write-Ok "Hook already registered in Claude settings"
     } else {
         $hook = [PSCustomObject]@{
@@ -228,7 +241,7 @@ try {
                 }
             )
         }
-        $settings.hooks.PreToolUse += $hook
+        $settings.hooks.PreToolUse = @($settings.hooks.PreToolUse) + @($hook)
         $json = $settings | ConvertTo-Json -Depth 10
         [System.IO.File]::WriteAllText($CLAUDE_SETTINGS, $json)
         Write-Ok "Hook registered in $CLAUDE_SETTINGS"
@@ -253,6 +266,93 @@ try {
 }
 
 # ---------------------------------------------------------------------------
+# Step 7: Create Copilot hook template & offer per-repo install
+# ---------------------------------------------------------------------------
+
+Write-Step "Setting up GitHub Copilot hook..."
+
+$COPILOT_TEMPLATE = Join-Path $TERSE_HOME "copilot-hooks.json"
+$copilotBashCmd = "$BINARY copilot-hook"
+$copilotPsCmd = "& `"$BINARY`" copilot-hook"
+
+# Always create/update the template at ~/.terse/copilot-hooks.json
+$copilotHooksJson = @"
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "type": "command",
+        "bash": "$($BINARY -replace '\\', '/') copilot-hook",
+        "powershell": "& \`"$BINARY\`" copilot-hook",
+        "timeoutSec": 30
+      }
+    ]
+  }
+}
+"@
+[System.IO.File]::WriteAllText($COPILOT_TEMPLATE, $copilotHooksJson)
+Write-Ok "Created Copilot hook template at $COPILOT_TEMPLATE"
+
+# Check if we're in a git repo and offer to install hooks there
+$gitRoot = $null
+try {
+    $gitRoot = & git rev-parse --show-toplevel 2>$null
+} catch { }
+
+if ($gitRoot) {
+    $hooksDir = Join-Path $gitRoot ".github" "hooks"
+    $hooksFile = Join-Path $hooksDir "terse.json"
+
+    if (Test-Path $hooksFile) {
+        if (Select-String -Path $hooksFile -Pattern "terse" -Quiet) {
+            Write-Ok "Copilot hook already registered in $hooksFile"
+        } else {
+            # File exists but no terse entry — merge in our hook
+            try {
+                $existingJson = Get-Content $hooksFile -Raw | ConvertFrom-Json
+                # Ensure preToolUse array exists
+                $existingProps = @($existingJson.PSObject.Properties | ForEach-Object { $_.Name })
+                $hooksProps = if ($existingProps -contains "hooks") {
+                    @($existingJson.hooks.PSObject.Properties | ForEach-Object { $_.Name })
+                } else { @() }
+
+                if (-not ($existingProps -contains "hooks")) {
+                    $existingJson | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
+                }
+                if (-not ($hooksProps -contains "preToolUse")) {
+                    $existingJson.hooks | Add-Member -NotePropertyName "preToolUse" -NotePropertyValue @()
+                }
+
+                $newEntry = [PSCustomObject]@{
+                    type       = "command"
+                    bash       = "$($BINARY -replace '\\', '/') copilot-hook"
+                    powershell = "& `"$BINARY`" copilot-hook"
+                    timeoutSec = 30
+                }
+                $existingJson.hooks.preToolUse = @($existingJson.hooks.preToolUse) + @($newEntry)
+                $mergedJson = $existingJson | ConvertTo-Json -Depth 10
+                [System.IO.File]::WriteAllText($hooksFile, $mergedJson)
+                Write-Ok "Added terse hook to $hooksFile"
+            } catch {
+                Write-Warn "Could not update $hooksFile automatically."
+                Write-Warn "Copy $COPILOT_TEMPLATE to $hooksDir manually."
+            }
+        }
+    } else {
+        # Create new hooks file
+        New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
+        Copy-Item $COPILOT_TEMPLATE $hooksFile
+        Write-Ok "Created Copilot hook at $hooksFile"
+    }
+    Write-Warn "Commit .github/hooks/terse.json to your repo's default branch for Copilot coding agent."
+} else {
+    Write-Warn "Not in a git repo — skipping per-repo Copilot hook install."
+    Write-Warn "To add Copilot hooks to a repo, copy the template:"
+    Write-Host "    copy `"$COPILOT_TEMPLATE`" <repo>\.github\hooks\terse.json" -ForegroundColor DarkYellow
+}
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 
@@ -261,7 +361,8 @@ Write-Step "Installation complete!"
 Write-Host ""
 Write-Host "  Binary:  $BINARY" -ForegroundColor White
 Write-Host "  Config:  $CONFIG_FILE" -ForegroundColor White
-Write-Host "  Hook:    $CLAUDE_SETTINGS" -ForegroundColor White
+Write-Host "  Claude:  $CLAUDE_SETTINGS" -ForegroundColor White
+Write-Host "  Copilot: $COPILOT_TEMPLATE (template)" -ForegroundColor White
 Write-Host ""
 Write-Host "  Quick start:" -ForegroundColor Cyan
 Write-Host "    terse health       — verify installation"

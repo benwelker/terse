@@ -489,10 +489,67 @@ pub fn run_health() -> Result<()> {
         );
     }
 
-    // 8. Hook registration hint
+    // 8. Copilot hook status
+    let copilot_template_ok = process::terse_home_dir()
+        .map(|p| p.join("copilot-hooks.json").exists())
+        .unwrap_or(false);
+    print_health_item(
+        "Copilot template",
+        copilot_template_ok,
+        if copilot_template_ok {
+            "~/.terse/copilot-hooks.json found"
+        } else {
+            "not found (run install script to create)"
+        },
+    );
+
+    // Check current repo for Copilot hooks
+    let copilot_repo_hook = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .map(|root| {
+            std::path::PathBuf::from(&root)
+                .join(".github")
+                .join("hooks")
+                .join("terse.json")
+        });
+
+    if let Some(hooks_path) = &copilot_repo_hook {
+        let exists = hooks_path.exists();
+        let has_terse = exists
+            && std::fs::read_to_string(hooks_path)
+                .map(|c| c.contains("terse"))
+                .unwrap_or(false);
+        print_health_item(
+            "Copilot repo hook",
+            has_terse,
+            if has_terse {
+                ".github/hooks/terse.json registered"
+            } else if exists {
+                ".github/hooks/terse.json exists but no terse entry"
+            } else {
+                ".github/hooks/terse.json not found in this repo"
+            },
+        );
+    } else {
+        print_health_item(
+            "Copilot repo hook",
+            false,
+            "not in a git repo",
+        );
+    }
+
+    // 9. Hook registration hint
     println!();
     println!(
-        "  {} Check ~/.claude/settings.json for hook registration",
+        "  {} Check ~/.claude/settings.json for Claude Code hook registration",
+        "Hint:".dimmed()
+    );
+    println!(
+        "  {} Copy ~/.terse/copilot-hooks.json to <repo>/.github/hooks/terse.json for Copilot",
         "Hint:".dimmed()
     );
 
@@ -819,10 +876,13 @@ pub fn run_self_uninstall(keep_data: bool, force: bool) -> Result<()> {
     // Step 1: Deregister Claude Code hook
     uninstall_deregister_hook();
 
-    // Step 2: Remove from shell profile / PATH
+    // Step 2: Deregister Copilot hook (current repo)
+    uninstall_deregister_copilot_hook();
+
+    // Step 3: Remove from shell profile / PATH
     uninstall_remove_path();
 
-    // Step 3: Remove files
+    // Step 4: Remove files
     uninstall_remove_files(keep_data);
 
     // Done
@@ -954,6 +1014,157 @@ fn is_terse_hook_entry(entry: &serde_json::Value) -> bool {
         return true;
     }
     false
+}
+
+/// Check if a Copilot hook entry references terse.
+///
+/// Copilot format: `{ "type": "command", "bash": "...terse...", "powershell": "...terse..." }`
+fn is_terse_copilot_entry(entry: &serde_json::Value) -> bool {
+    for key in &["bash", "powershell", "command"] {
+        if let Some(val) = entry.get(key).and_then(|v| v.as_str()) {
+            if val.contains("terse") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Deregister the terse hook from Copilot hooks in the current git repo.
+///
+/// Looks for `.github/hooks/terse.json` in the current git repo root.
+/// If the file only contains terse hooks, it is removed entirely.
+/// If mixed with other hooks, only terse entries are filtered out.
+fn uninstall_deregister_copilot_hook() {
+    println!("{}", "Removing Copilot hook...".bold());
+
+    // Find git repo root
+    let git_root = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
+    let Some(git_root) = git_root else {
+        println!(
+            "  {} Not in a git repo (skipping Copilot hook removal)",
+            "✓".green()
+        );
+        println!(
+            "  {} Check other repos for .github/hooks/terse.json and remove manually.",
+            "⚠".yellow()
+        );
+        return;
+    };
+
+    let hooks_file = std::path::PathBuf::from(&git_root)
+        .join(".github")
+        .join("hooks")
+        .join("terse.json");
+
+    if !hooks_file.exists() {
+        println!(
+            "  {} No Copilot hooks file found in current repo",
+            "✓".green()
+        );
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&hooks_file) {
+        Ok(c) => c,
+        Err(e) => {
+            println!(
+                "  {} Could not read {}: {}",
+                "⚠".yellow(),
+                hooks_file.display(),
+                e
+            );
+            return;
+        }
+    };
+
+    // If "terse" doesn't appear at all, nothing to do
+    if !content.contains("terse") {
+        println!(
+            "  {} No terse hook found in {}",
+            "✓".green(),
+            hooks_file.display()
+        );
+        return;
+    }
+
+    let mut data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(e) => {
+            println!(
+                "  {} Could not parse {}: {}",
+                "⚠".yellow(),
+                hooks_file.display(),
+                e
+            );
+            return;
+        }
+    };
+
+    // Filter terse entries from all hook arrays
+    let mut has_non_terse = false;
+    if let Some(hooks) = data.get_mut("hooks").and_then(|h| h.as_object_mut()) {
+        for (_key, arr) in hooks.iter_mut() {
+            if let Some(entries) = arr.as_array_mut() {
+                let original_len = entries.len();
+                entries.retain(|e| !is_terse_copilot_entry(e));
+                if !entries.is_empty() {
+                    has_non_terse = true;
+                }
+                if entries.len() < original_len {
+                    // We removed something
+                }
+            }
+        }
+    }
+
+    if has_non_terse {
+        // Write back filtered data
+        match serde_json::to_string_pretty(&data) {
+            Ok(json) => {
+                if let Err(e) = std::fs::write(&hooks_file, json) {
+                    println!(
+                        "  {} Could not write {}: {}",
+                        "⚠".yellow(),
+                        hooks_file.display(),
+                        e
+                    );
+                } else {
+                    println!(
+                        "  {} Removed terse entries from {}",
+                        "✓".green(),
+                        hooks_file.display()
+                    );
+                }
+            }
+            Err(e) => {
+                println!("  {} Could not serialize JSON: {}", "⚠".yellow(), e);
+            }
+        }
+    } else {
+        // All hooks were terse — remove the entire file
+        if let Err(e) = std::fs::remove_file(&hooks_file) {
+            println!(
+                "  {} Could not remove {}: {}",
+                "⚠".yellow(),
+                hooks_file.display(),
+                e
+            );
+        } else {
+            println!("  {} Removed {}", "✓".green(), hooks_file.display());
+        }
+    }
+
+    println!(
+        "  {} Check other repos for .github/hooks/terse.json and remove manually.",
+        "⚠".yellow()
+    );
 }
 
 /// Remove terse PATH entries from shell profiles (Unix) or user PATH (Windows).

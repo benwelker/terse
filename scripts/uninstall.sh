@@ -6,8 +6,9 @@
 #
 # This script reverses the install.sh actions:
 #   1. Deregisters the hook from ~/.claude/settings.json
-#   2. Removes ~/.terse/bin/ PATH entry from shell profile
-#   3. Removes the ~/.terse/ directory (binary, config, logs)
+#   2. Removes Copilot hook from current repo's .github/hooks/
+#   3. Removes ~/.terse/bin/ PATH entry from shell profile
+#   4. Removes the ~/.terse/ directory (binary, config, logs)
 #
 # Use --keep-data to preserve config and log files in ~/.terse/
 
@@ -151,7 +152,72 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Remove from shell profile PATH
+# Step 2: Remove Copilot hook from current repo
+# ---------------------------------------------------------------------------
+
+step "Removing Copilot hook..."
+
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+
+if [ -n "$GIT_ROOT" ]; then
+    HOOKS_FILE="$GIT_ROOT/.github/hooks/terse.json"
+
+    if [ -f "$HOOKS_FILE" ]; then
+        if grep -q "terse" "$HOOKS_FILE" 2>/dev/null; then
+            if command -v python3 &>/dev/null; then
+                python3 -c "
+import json, os
+
+with open('$HOOKS_FILE', 'r') as f:
+    data = json.load(f)
+
+hooks = data.get('hooks', {})
+has_non_terse = False
+
+for key in list(hooks.keys()):
+    arr = hooks[key]
+    if isinstance(arr, list):
+        filtered = [e for e in arr if 'terse' not in json.dumps(e)]
+        hooks[key] = filtered
+        if filtered:
+            has_non_terse = True
+    else:
+        has_non_terse = True
+
+if has_non_terse:
+    data['hooks'] = hooks
+    with open('$HOOKS_FILE', 'w') as f:
+        json.dump(data, f, indent=2)
+    print('filtered')
+else:
+    os.remove('$HOOKS_FILE')
+    print('removed')
+" | {
+                    read -r result
+                    if [ "$result" = "removed" ]; then
+                        ok "Removed $HOOKS_FILE"
+                    elif [ "$result" = "filtered" ]; then
+                        ok "Removed terse entries from $HOOKS_FILE"
+                    fi
+                }
+            else
+                # No python3 — just remove the file if it's solely terse
+                rm -f "$HOOKS_FILE"
+                ok "Removed $HOOKS_FILE (could not filter — removed entire file)"
+            fi
+        else
+            ok "No terse hook found in $HOOKS_FILE"
+        fi
+    else
+        ok "No Copilot hooks file found in current repo"
+    fi
+else
+    ok "Not in a git repo (skipping Copilot hook removal)"
+    warn "Check other repos for .github/hooks/terse.json and remove manually."
+fi
+
+# ---------------------------------------------------------------------------
+# Step 3: Remove from shell profile PATH
 # ---------------------------------------------------------------------------
 
 step "Removing from shell profile..."
@@ -221,7 +287,7 @@ if [ "$removed_from_profile" = true ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 3: Remove files
+# Step 4: Remove files
 # ---------------------------------------------------------------------------
 
 if [ "$KEEP_DATA" = true ]; then

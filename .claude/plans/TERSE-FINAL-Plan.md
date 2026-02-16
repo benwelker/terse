@@ -74,11 +74,12 @@ Claude Code executes the (possibly rewritten) command
 terse run "original_command":
   Step 2 — Execute the command via optimizer
   Step 3 — Router Decision (based on actual output byte size):
-    Output < 2 KB?                           → Passthrough (not worth optimizing)
+    Output < 2 KB?                            → Passthrough (not worth optimizing)
+    Preprocess (see step 3.5)                 → Preprocess (Rust, <20ms)
     Rule-based optimizer available (2–10 KB)? → Fast Path (Rust, <20ms)
-    Ollama available AND output ≥ 10 KB?      → Preprocess → Smart Path (LLM, <2s)
+    Ollama available AND output ≥ 10 KB?      → Smart Path (LLM, <10s)
     None of the above?                        → Run raw and pass through
-  Step 3.5 — Preprocessing (Smart Path only, Phase 5-1):
+  Step 3.5 — Preprocessing (Phase 5-1):
     Noise removal (ANSI, progress bars, boilerplate)
     Path filtering (node_modules, target/debug, __pycache__, etc.)
     Deduplication (repeated lines/blocks → count annotation)

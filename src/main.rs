@@ -24,8 +24,10 @@ struct App {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// PreToolUse hook handler — reads JSON from stdin, returns rewrite or passthrough
+    /// Claude Code PreToolUse hook — reads JSON from stdin, returns rewrite or passthrough
     Hook,
+    /// Copilot preToolUse hook — reads JSON from stdin, returns rewrite or permission decision
+    CopilotHook,
     /// Execute a command with optimization and print the result to stdout
     Run {
         /// The command to execute and optimize
@@ -121,6 +123,7 @@ fn main() -> Result<()> {
 
     match app.command {
         Commands::Hook => hook::run(),
+        Commands::CopilotHook => hook::run_copilot(),
         Commands::Run { args } => {
             let command = args.join(" ");
             run::execute(&command)
