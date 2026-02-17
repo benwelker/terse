@@ -363,10 +363,7 @@ mod tests {
             parsed["hookSpecificOutput"]["updatedInput"]["command"],
             "terse run \"ls -la\""
         );
-        assert_eq!(
-            parsed["hookSpecificOutput"]["permissionDecision"],
-            "allow"
-        );
+        assert_eq!(parsed["hookSpecificOutput"]["permissionDecision"], "allow");
     }
 
     #[test]

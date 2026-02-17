@@ -535,11 +535,7 @@ pub fn run_health() -> Result<()> {
             },
         );
     } else {
-        print_health_item(
-            "Copilot repo hook",
-            false,
-            "not in a git repo",
-        );
+        print_health_item("Copilot repo hook", false, "not in a git repo");
     }
 
     // 9. Hook registration hint
@@ -1021,10 +1017,10 @@ fn is_terse_hook_entry(entry: &serde_json::Value) -> bool {
 /// Copilot format: `{ "type": "command", "bash": "...terse...", "powershell": "...terse..." }`
 fn is_terse_copilot_entry(entry: &serde_json::Value) -> bool {
     for key in &["bash", "powershell", "command"] {
-        if let Some(val) = entry.get(key).and_then(|v| v.as_str()) {
-            if val.contains("terse") {
-                return true;
-            }
+        if let Some(val) = entry.get(key).and_then(|v| v.as_str())
+            && val.contains("terse")
+        {
+            return true;
         }
     }
     false
