@@ -137,68 +137,68 @@ if (Test-Path $CLAUDE_SETTINGS) {
 # Step 2: Remove Copilot hook from current repo
 # ---------------------------------------------------------------------------
 
-Write-Step "Removing Copilot hook..."
+# Write-Step "Removing Copilot hook..."
 
-$gitRoot = $null
-try {
-    $gitRoot = & git rev-parse --show-toplevel 2>$null
-} catch { }
+# $gitRoot = $null
+# try {
+#     $gitRoot = & git rev-parse --show-toplevel 2>$null
+# } catch { }
 
-if ($gitRoot) {
-    $hooksDir = Join-Path $gitRoot ".github" "hooks"
-    $hooksFile = Join-Path $hooksDir "terse.json"
+# if ($gitRoot) {
+#     $hooksDir = Join-Path $gitRoot ".github" "hooks"
+#     $hooksFile = Join-Path $hooksDir "terse.json"
 
-    if (Test-Path $hooksFile) {
-        # If the entire file is a terse hook file, remove it
-        $content = Get-Content $hooksFile -Raw
-        if ($content -match "terse") {
-            try {
-                $hooksJson = $content | ConvertFrom-Json
-                # Check if this file only contains terse hooks
-                $hasNonTerse = $false
-                if ($hooksJson.hooks.PSObject.Properties) {
-                    foreach ($prop in $hooksJson.hooks.PSObject.Properties) {
-                        $hookArray = @($prop.Value)
-                        $filtered = @($hookArray | Where-Object {
-                            $entryStr = $_ | ConvertTo-Json -Compress
-                            $entryStr -notmatch "terse"
-                        })
-                        if ($filtered.Count -gt 0) {
-                            $hasNonTerse = $true
-                        }
-                    }
-                }
+#     if (Test-Path $hooksFile) {
+#         # If the entire file is a terse hook file, remove it
+#         $content = Get-Content $hooksFile -Raw
+#         if ($content -match "terse") {
+#             try {
+#                 $hooksJson = $content | ConvertFrom-Json
+#                 # Check if this file only contains terse hooks
+#                 $hasNonTerse = $false
+#                 if ($hooksJson.hooks.PSObject.Properties) {
+#                     foreach ($prop in $hooksJson.hooks.PSObject.Properties) {
+#                         $hookArray = @($prop.Value)
+#                         $filtered = @($hookArray | Where-Object {
+#                             $entryStr = $_ | ConvertTo-Json -Compress
+#                             $entryStr -notmatch "terse"
+#                         })
+#                         if ($filtered.Count -gt 0) {
+#                             $hasNonTerse = $true
+#                         }
+#                     }
+#                 }
 
-                if (-not $hasNonTerse) {
-                    Remove-Item $hooksFile -Force
-                    Write-Ok "Removed $hooksFile"
-                } else {
-                    # Remove only terse entries from each hook array
-                    foreach ($prop in $hooksJson.hooks.PSObject.Properties) {
-                        $hookArray = @($prop.Value)
-                        $filtered = @($hookArray | Where-Object {
-                            $entryStr = $_ | ConvertTo-Json -Compress
-                            $entryStr -notmatch "terse"
-                        })
-                        $hooksJson.hooks.($prop.Name) = $filtered
-                    }
-                    $newJson = $hooksJson | ConvertTo-Json -Depth 10
-                    [System.IO.File]::WriteAllText($hooksFile, $newJson)
-                    Write-Ok "Removed terse entries from $hooksFile"
-                }
-            } catch {
-                Write-Warn "Could not parse $hooksFile — remove terse entries manually."
-            }
-        } else {
-            Write-Ok "No terse hook found in $hooksFile"
-        }
-    } else {
-        Write-Ok "No Copilot hooks file found in current repo"
-    }
-} else {
-    Write-Ok "Not in a git repo (skipping Copilot hook removal)"
-    Write-Warn "Check other repos for .github/hooks/terse.json and remove manually."
-}
+#                 if (-not $hasNonTerse) {
+#                     Remove-Item $hooksFile -Force
+#                     Write-Ok "Removed $hooksFile"
+#                 } else {
+#                     # Remove only terse entries from each hook array
+#                     foreach ($prop in $hooksJson.hooks.PSObject.Properties) {
+#                         $hookArray = @($prop.Value)
+#                         $filtered = @($hookArray | Where-Object {
+#                             $entryStr = $_ | ConvertTo-Json -Compress
+#                             $entryStr -notmatch "terse"
+#                         })
+#                         $hooksJson.hooks.($prop.Name) = $filtered
+#                     }
+#                     $newJson = $hooksJson | ConvertTo-Json -Depth 10
+#                     [System.IO.File]::WriteAllText($hooksFile, $newJson)
+#                     Write-Ok "Removed terse entries from $hooksFile"
+#                 }
+#             } catch {
+#                 Write-Warn "Could not parse $hooksFile — remove terse entries manually."
+#             }
+#         } else {
+#             Write-Ok "No terse hook found in $hooksFile"
+#         }
+#     } else {
+#         Write-Ok "No Copilot hooks file found in current repo"
+#     }
+# } else {
+#     Write-Ok "Not in a git repo (skipping Copilot hook removal)"
+#     Write-Warn "Check other repos for .github/hooks/terse.json and remove manually."
+# }
 
 # ---------------------------------------------------------------------------
 # Step 3: Remove from PATH

@@ -269,88 +269,88 @@ try {
 # Step 7: Create Copilot hook template & offer per-repo install
 # ---------------------------------------------------------------------------
 
-Write-Step "Setting up GitHub Copilot hook..."
+# Write-Step "Setting up GitHub Copilot hook..."
 
-$COPILOT_TEMPLATE = Join-Path $TERSE_HOME "copilot-hooks.json"
-$copilotBashCmd = "$BINARY copilot-hook"
-$copilotPsCmd = "& `"$BINARY`" copilot-hook"
+# $COPILOT_TEMPLATE = Join-Path $TERSE_HOME "copilot-hooks.json"
+# $copilotBashCmd = "$BINARY copilot-hook"
+# $copilotPsCmd = "& `"$BINARY`" copilot-hook"
 
-# Always create/update the template at ~/.terse/copilot-hooks.json
-$copilotHooksJson = @"
-{
-  "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {
-        "type": "command",
-        "bash": "$($BINARY -replace '\\', '/') copilot-hook",
-        "powershell": "& \`"$BINARY\`" copilot-hook",
-        "timeoutSec": 30
-      }
-    ]
-  }
-}
-"@
-[System.IO.File]::WriteAllText($COPILOT_TEMPLATE, $copilotHooksJson)
-Write-Ok "Created Copilot hook template at $COPILOT_TEMPLATE"
+# # Always create/update the template at ~/.terse/copilot-hooks.json
+# $copilotHooksJson = @"
+# {
+#   "version": 1,
+#   "hooks": {
+#     "preToolUse": [
+#       {
+#         "type": "command",
+#         "bash": "$($BINARY -replace '\\', '/') copilot-hook",
+#         "powershell": "& \`"$BINARY\`" copilot-hook",
+#         "timeoutSec": 30
+#       }
+#     ]
+#   }
+# }
+# "@
+# [System.IO.File]::WriteAllText($COPILOT_TEMPLATE, $copilotHooksJson)
+# Write-Ok "Created Copilot hook template at $COPILOT_TEMPLATE"
 
-# Check if we're in a git repo and offer to install hooks there
-$gitRoot = $null
-try {
-    $gitRoot = & git rev-parse --show-toplevel 2>$null
-} catch { }
+# # Check if we're in a git repo and offer to install hooks there
+# $gitRoot = $null
+# try {
+#     $gitRoot = & git rev-parse --show-toplevel 2>$null
+# } catch { }
 
-if ($gitRoot) {
-    $hooksDir = Join-Path $gitRoot ".github" "hooks"
-    $hooksFile = Join-Path $hooksDir "terse.json"
+# if ($gitRoot) {
+#     $hooksDir = Join-Path $gitRoot ".github" "hooks"
+#     $hooksFile = Join-Path $hooksDir "terse.json"
 
-    if (Test-Path $hooksFile) {
-        if (Select-String -Path $hooksFile -Pattern "terse" -Quiet) {
-            Write-Ok "Copilot hook already registered in $hooksFile"
-        } else {
-            # File exists but no terse entry — merge in our hook
-            try {
-                $existingJson = Get-Content $hooksFile -Raw | ConvertFrom-Json
-                # Ensure preToolUse array exists
-                $existingProps = @($existingJson.PSObject.Properties | ForEach-Object { $_.Name })
-                $hooksProps = if ($existingProps -contains "hooks") {
-                    @($existingJson.hooks.PSObject.Properties | ForEach-Object { $_.Name })
-                } else { @() }
+#     if (Test-Path $hooksFile) {
+#         if (Select-String -Path $hooksFile -Pattern "terse" -Quiet) {
+#             Write-Ok "Copilot hook already registered in $hooksFile"
+#         } else {
+#             # File exists but no terse entry — merge in our hook
+#             try {
+#                 $existingJson = Get-Content $hooksFile -Raw | ConvertFrom-Json
+#                 # Ensure preToolUse array exists
+#                 $existingProps = @($existingJson.PSObject.Properties | ForEach-Object { $_.Name })
+#                 $hooksProps = if ($existingProps -contains "hooks") {
+#                     @($existingJson.hooks.PSObject.Properties | ForEach-Object { $_.Name })
+#                 } else { @() }
 
-                if (-not ($existingProps -contains "hooks")) {
-                    $existingJson | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
-                }
-                if (-not ($hooksProps -contains "preToolUse")) {
-                    $existingJson.hooks | Add-Member -NotePropertyName "preToolUse" -NotePropertyValue @()
-                }
+#                 if (-not ($existingProps -contains "hooks")) {
+#                     $existingJson | Add-Member -NotePropertyName "hooks" -NotePropertyValue ([PSCustomObject]@{})
+#                 }
+#                 if (-not ($hooksProps -contains "preToolUse")) {
+#                     $existingJson.hooks | Add-Member -NotePropertyName "preToolUse" -NotePropertyValue @()
+#                 }
 
-                $newEntry = [PSCustomObject]@{
-                    type       = "command"
-                    bash       = "$($BINARY -replace '\\', '/') copilot-hook"
-                    powershell = "& `"$BINARY`" copilot-hook"
-                    timeoutSec = 30
-                }
-                $existingJson.hooks.preToolUse = @($existingJson.hooks.preToolUse) + @($newEntry)
-                $mergedJson = $existingJson | ConvertTo-Json -Depth 10
-                [System.IO.File]::WriteAllText($hooksFile, $mergedJson)
-                Write-Ok "Added terse hook to $hooksFile"
-            } catch {
-                Write-Warn "Could not update $hooksFile automatically."
-                Write-Warn "Copy $COPILOT_TEMPLATE to $hooksDir manually."
-            }
-        }
-    } else {
-        # Create new hooks file
-        New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
-        Copy-Item $COPILOT_TEMPLATE $hooksFile
-        Write-Ok "Created Copilot hook at $hooksFile"
-    }
-    Write-Warn "Commit .github/hooks/terse.json to your repo's default branch for Copilot coding agent."
-} else {
-    Write-Warn "Not in a git repo — skipping per-repo Copilot hook install."
-    Write-Warn "To add Copilot hooks to a repo, copy the template:"
-    Write-Host "    copy `"$COPILOT_TEMPLATE`" <repo>\.github\hooks\terse.json" -ForegroundColor DarkYellow
-}
+#                 $newEntry = [PSCustomObject]@{
+#                     type       = "command"
+#                     bash       = "$($BINARY -replace '\\', '/') copilot-hook"
+#                     powershell = "& `"$BINARY`" copilot-hook"
+#                     timeoutSec = 30
+#                 }
+#                 $existingJson.hooks.preToolUse = @($existingJson.hooks.preToolUse) + @($newEntry)
+#                 $mergedJson = $existingJson | ConvertTo-Json -Depth 10
+#                 [System.IO.File]::WriteAllText($hooksFile, $mergedJson)
+#                 Write-Ok "Added terse hook to $hooksFile"
+#             } catch {
+#                 Write-Warn "Could not update $hooksFile automatically."
+#                 Write-Warn "Copy $COPILOT_TEMPLATE to $hooksDir manually."
+#             }
+#         }
+#     } else {
+#         # Create new hooks file
+#         New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
+#         Copy-Item $COPILOT_TEMPLATE $hooksFile
+#         Write-Ok "Created Copilot hook at $hooksFile"
+#     }
+#     Write-Warn "Commit .github/hooks/terse.json to your repo's default branch for Copilot coding agent."
+# } else {
+#     Write-Warn "Not in a git repo — skipping per-repo Copilot hook install."
+#     Write-Warn "To add Copilot hooks to a repo, copy the template:"
+#     Write-Host "    copy `"$COPILOT_TEMPLATE`" <repo>\.github\hooks\terse.json" -ForegroundColor DarkYellow
+# }
 
 # ---------------------------------------------------------------------------
 # Done

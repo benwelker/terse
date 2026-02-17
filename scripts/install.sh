@@ -303,77 +303,77 @@ fi
 # Step 8: Create Copilot hook template & offer per-repo install
 # ---------------------------------------------------------------------------
 
-step "Setting up GitHub Copilot hook..."
+# step "Setting up GitHub Copilot hook..."
 
-COPILOT_TEMPLATE="$TERSE_HOME/copilot-hooks.json"
-COPILOT_HOOK_CMD="$BINARY copilot-hook"
+# COPILOT_TEMPLATE="$TERSE_HOME/copilot-hooks.json"
+# COPILOT_HOOK_CMD="$BINARY copilot-hook"
 
-# Always create/update the template at ~/.terse/copilot-hooks.json
-cat > "$COPILOT_TEMPLATE" <<COPILOTEOF
-{
-  "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {
-        "type": "command",
-        "bash": "$BINARY copilot-hook",
-        "timeoutSec": 30
-      }
-    ]
-  }
-}
-COPILOTEOF
-ok "Created Copilot hook template at $COPILOT_TEMPLATE"
+# # Always create/update the template at ~/.terse/copilot-hooks.json
+# cat > "$COPILOT_TEMPLATE" <<COPILOTEOF
+# {
+#   "version": 1,
+#   "hooks": {
+#     "preToolUse": [
+#       {
+#         "type": "command",
+#         "bash": "$BINARY copilot-hook",
+#         "timeoutSec": 30
+#       }
+#     ]
+#   }
+# }
+# COPILOTEOF
+# ok "Created Copilot hook template at $COPILOT_TEMPLATE"
 
-# Check if we're in a git repo and offer to install hooks there
-GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
+# # Check if we're in a git repo and offer to install hooks there
+# GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 
-if [ -n "$GIT_ROOT" ]; then
-    HOOKS_DIR="$GIT_ROOT/.github/hooks"
-    HOOKS_FILE="$HOOKS_DIR/terse.json"
+# if [ -n "$GIT_ROOT" ]; then
+#     HOOKS_DIR="$GIT_ROOT/.github/hooks"
+#     HOOKS_FILE="$HOOKS_DIR/terse.json"
 
-    if [ -f "$HOOKS_FILE" ]; then
-        if grep -q "terse" "$HOOKS_FILE" 2>/dev/null; then
-            ok "Copilot hook already registered in $HOOKS_FILE"
-        else
-            # File exists but no terse entry — try to merge
-            if command -v python3 &>/dev/null; then
-                python3 -c "
-import json
-with open('$HOOKS_FILE', 'r') as f:
-    data = json.load(f)
-hooks = data.setdefault('hooks', {})
-pre = hooks.setdefault('preToolUse', [])
-entry = {
-    'type': 'command',
-    'bash': '$COPILOT_HOOK_CMD',
-    'timeoutSec': 30
-}
-pre.append(entry)
-with open('$HOOKS_FILE', 'w') as f:
-    json.dump(data, f, indent=2)
-print('ok')
-" && ok "Added terse hook to $HOOKS_FILE" || {
-                    warn "Could not update $HOOKS_FILE automatically."
-                    warn "Copy $COPILOT_TEMPLATE to $HOOKS_DIR manually."
-                }
-            else
-                warn "Could not update $HOOKS_FILE (python3 not found)."
-                warn "Copy $COPILOT_TEMPLATE to $HOOKS_DIR manually."
-            fi
-        fi
-    else
-        # Create new hooks file
-        mkdir -p "$HOOKS_DIR"
-        cp "$COPILOT_TEMPLATE" "$HOOKS_FILE"
-        ok "Created Copilot hook at $HOOKS_FILE"
-    fi
-    warn "Commit .github/hooks/terse.json to your repo's default branch for Copilot coding agent."
-else
-    warn "Not in a git repo — skipping per-repo Copilot hook install."
-    warn "To add Copilot hooks to a repo, copy the template:"
-    echo "    cp \"$COPILOT_TEMPLATE\" <repo>/.github/hooks/terse.json"
-fi
+#     if [ -f "$HOOKS_FILE" ]; then
+#         if grep -q "terse" "$HOOKS_FILE" 2>/dev/null; then
+#             ok "Copilot hook already registered in $HOOKS_FILE"
+#         else
+#             # File exists but no terse entry — try to merge
+#             if command -v python3 &>/dev/null; then
+#                 python3 -c "
+# import json
+# with open('$HOOKS_FILE', 'r') as f:
+#     data = json.load(f)
+# hooks = data.setdefault('hooks', {})
+# pre = hooks.setdefault('preToolUse', [])
+# entry = {
+#     'type': 'command',
+#     'bash': '$COPILOT_HOOK_CMD',
+#     'timeoutSec': 30
+# }
+# pre.append(entry)
+# with open('$HOOKS_FILE', 'w') as f:
+#     json.dump(data, f, indent=2)
+# print('ok')
+# " && ok "Added terse hook to $HOOKS_FILE" || {
+#                     warn "Could not update $HOOKS_FILE automatically."
+#                     warn "Copy $COPILOT_TEMPLATE to $HOOKS_DIR manually."
+#                 }
+#             else
+#                 warn "Could not update $HOOKS_FILE (python3 not found)."
+#                 warn "Copy $COPILOT_TEMPLATE to $HOOKS_DIR manually."
+#             fi
+#         fi
+#     else
+#         # Create new hooks file
+#         mkdir -p "$HOOKS_DIR"
+#         cp "$COPILOT_TEMPLATE" "$HOOKS_FILE"
+#         ok "Created Copilot hook at $HOOKS_FILE"
+#     fi
+#     warn "Commit .github/hooks/terse.json to your repo's default branch for Copilot coding agent."
+# else
+#     warn "Not in a git repo — skipping per-repo Copilot hook install."
+#     warn "To add Copilot hooks to a repo, copy the template:"
+#     echo "    cp \"$COPILOT_TEMPLATE\" <repo>/.github/hooks/terse.json"
+# fi
 
 # ---------------------------------------------------------------------------
 # Done
